@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:5000"
+    environment:
+      FLASK_DEBUG: "0"
+      # GUNICORN_WORKERS: "2"   # descomenta para fijar workers (por defecto: 2*CPU+1, máx 4)
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 256M
