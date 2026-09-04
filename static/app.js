@@ -3,6 +3,7 @@ let PRESETS = {};
 let lastX = [], lastH = [];
 let lastRegiones = [], lastCriticos = [];
 let lastProcTxt = '';
+let lastPlotData = null, lastSolapeData = null;
 let focusedExpr = null;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -27,6 +28,44 @@ function renderLatex(el, tex, display = false) {
 function renderAll(el) {
   if (window.renderMathInElement) {
     try { renderMathInElement(el, { delimiters: [{ left: '\\(', right: '\\)', display: false }, { left: '\\[', right: '\\]', display: true }, { left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }] }); return; } catch (e) {}
+  }
+}
+
+// ---------- tema (oscuro por defecto) ----------
+// El atributo data-theme se fija ANTES del CSS con un script inline en <head>;
+// aquí solo se alterna, se persiste y se repintan las gráficas.
+const THEME_KEY = 'tema';
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+function plotTheme() {
+  return currentTheme() === 'dark'
+    ? { paper: '#101a2e', plot: '#101a2e', font: '#e2e8f0', grid: '#1e293b', zero: '#3b4f6e', marker: '#38bdf8' }
+    : { paper: '#ffffff', plot: '#ffffff', font: '#0f172a', grid: '#e2e8f0', zero: '#94a3b8', marker: '#0284c7' };
+}
+function plotLayout(extra) {
+  const t = plotTheme();
+  return Object.assign({
+    margin: { t: 36, r: 10, l: 44, b: 36 },
+    paper_bgcolor: t.paper, plot_bgcolor: t.plot,
+    font: { color: t.font },
+    xaxis: { gridcolor: t.grid, zerolinecolor: t.zero },
+    yaxis: { gridcolor: t.grid, zerolinecolor: t.zero }
+  }, extra || {});
+}
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* modo privado */ }
+  const b = $('#btnTema');
+  if (b) {
+    b.textContent = t === 'light' ? '🌙' : '☀️';
+    b.title = t === 'light' ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro';
+  }
+  // repintar gráficas si hay datos
+  if (window.Plotly && lastPlotData) {
+    plotAll(lastPlotData);
+    if (lastSolapeData) renderSolape(lastSolapeData.tau, lastSolapeData.x, lastSolapeData.h, lastSolapeData.prod, lastSolapeData.t0);
+    if (lastPlotData && $('#plotY').data) { try { Plotly.relayout('plotY', { shapes: yShapes(parseFloat($('#sliderT').value)) }); } catch (e) { /* noop */ } }
   }
 }
 
@@ -381,26 +420,34 @@ function condPlain(r) {
 }
 // líneas verticales en la gráfica y(t): críticos (punteadas) + t actual (sólida)
 function yShapes(t0) {
+  const t = plotTheme();
   const shapes = lastCriticos.map(v => ({
     type: 'line', x0: v, x1: v, y0: 0, y1: 1, yref: 'paper',
-    line: { color: '#94a3b8', width: 1, dash: 'dot' }, hoverinfo: 'skip'
+    line: { color: t.zero, width: 1, dash: 'dot' }, hoverinfo: 'skip'
   }));
   if (t0 != null && Number.isFinite(t0)) {
     shapes.push({
       type: 'line', x0: t0, x1: t0, y0: 0, y1: 1, yref: 'paper',
-      line: { color: '#0284c7', width: 2 }, hoverinfo: 'skip'
+      line: { color: t.marker, width: 2 }, hoverinfo: 'skip'
     });
   }
   return shapes;
 }
 function plotAll(j) {
-  const layout = { margin: { t: 36, r: 10, l: 44, b: 36 }, paper_bgcolor: '#fff', plot_bgcolor: '#fff' };
+  lastPlotData = j;
   Plotly.newPlot('plotXH', [
     { x: j.grid, y: j.x_vals, name: 'x(t)', type: 'scatter' },
     { x: j.grid, y: j.h_vals, name: 'h(t)', type: 'scatter' }
-  ], { ...layout, title: 'x(t) y h(t)' }, { responsive: true });
+  ], plotLayout({ title: 'x(t) y h(t)' }), { responsive: true });
   Plotly.newPlot('plotY', [{ x: j.grid, y: j.y_vals, name: 'y(t)', type: 'scatter', line: { width: 3 } }],
-    { ...layout, title: 'y(t) = x(t) ∗ h(t)', shapes: yShapes(null) }, { responsive: true });
+    plotLayout({ title: 'y(t) = x(t) ∗ h(t)', shapes: yShapes(null) }), { responsive: true });
+}
+function renderSolape(tau, xv, hv, prod, t0) {
+  Plotly.newPlot('plotSolape', [
+    { x: tau, y: xv, name: 'x(τ)', type: 'scatter' },
+    { x: tau, y: hv, name: `h(${t0}−τ)`, type: 'scatter' },
+    { x: tau, y: prod, name: 'producto', fill: 'tozeroy', type: 'scatter' }
+  ], plotLayout({ title: `Solape en τ · t = ${t0}` }), { responsive: true });
 }
 async function updateSolape() {
   if (!lastX.length) return;
@@ -417,11 +464,8 @@ async function updateSolape() {
     const r = await fetch('/api/solape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x: lastX, h: lastH, t0 }) });
     const j = await r.json(); if (!j.ok) return;
     $('#areaVal').textContent = j.area_trapz.toFixed(4);
-    Plotly.newPlot('plotSolape', [
-      { x: j.tau, y: j.x, name: 'x(τ)', type: 'scatter' },
-      { x: j.tau, y: j.h, name: `h(${t0}−τ)`, type: 'scatter' },
-      { x: j.tau, y: j.prod, name: 'producto', fill: 'tozeroy', type: 'scatter' }
-    ], { margin: { t: 36, r: 10, l: 44, b: 36 }, title: `Solape en τ · t = ${t0}`, paper_bgcolor: '#fff', plot_bgcolor: '#fff' }, { responsive: true });
+    lastSolapeData = { tau: j.tau, x: j.x, h: j.h, prod: j.prod, t0 };
+    renderSolape(j.tau, j.x, j.h, j.prod, t0);
   } catch (e) { /* silencioso */ }
 }
 
@@ -516,11 +560,14 @@ ADAPTACIÓN A CUALQUIER INTEGRAL ∫ f(u) du (con o sin límites):
   (7) Restar (TFC):  ∫[a → b] f(u) du = F(b) − F(a), simplificar.`;
 
 // ---------- wiring ----------
-$$('.tabs button, nav button').forEach(b => b.onclick = () => {
-  $$('.tabs button').forEach(x => x.classList.remove('active'));
+// (el botón de tema va aparte: no es una pestaña)
+$$('.tabs button[data-tab]').forEach(b => b.onclick = () => {
+  $$('.tabs button[data-tab]').forEach(x => x.classList.remove('active'));
   $$('.tab').forEach(x => x.classList.remove('active'));
   b.classList.add('active'); document.getElementById('tab-' + b.dataset.tab).classList.add('active');
 });
+$('#btnTema').onclick = () => applyTheme(currentTheme() === 'light' ? 'dark' : 'light');
+applyTheme(currentTheme());  // sincroniza icono/título con el tema ya fijado en <head>
 $('#addX').onclick = () => tramoRow($('#xRows'), { a: '0', b: 'oo', expr: '1' });
 $('#addH').onclick = () => tramoRow($('#hRows'), { a: '0', b: 'oo', expr: '1' });
 $('#xToTramos').onclick = () => descomponerSingle('x');
