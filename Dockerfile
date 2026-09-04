@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Dependencias primero (aprovecha caché de capas si solo cambia tu código)
-COPY requirements-prod.txt ./
+COPY requirements.txt requirements-prod.txt ./
 RUN pip install --no-cache-dir -r requirements-prod.txt
 
 COPY app.py gunicorn.conf.py ./
