@@ -9,6 +9,14 @@ Incluye solucionador de integrales indefinidas/definidas con verificación de la
 
 Stack: Flask + SymPy (motor simbólico) · Gunicorn (prod) · Docker · KaTeX + Plotly (frontend).
 
+## Documentación
+
+| Doc | Contenido |
+|---|---|
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Todo lo trabajado: bugs corregidos, procedimiento paso a paso, UI, CI/CD, modo oscuro |
+| [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md) | Guía operativa: arquitectura, actualizar/rollback, nginx/certbot, salud y diagnóstico |
+| [docs/DECISIONES.md](docs/DECISIONES.md) | Decisiones de diseño y su porqué (KISS/boring/YAGNI, matemática, técnica) |
+
 ## Uso local (sin Docker)
 
 ```bat
