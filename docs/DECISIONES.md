@@ -41,9 +41,28 @@ más allá de oscuro/claro.
   opcional persistido en `localStorage`. No se usa `prefers-color-scheme` como
   base: el requisito era "oscuro por defecto", punto. La barra superior queda
   oscura en ambos temas por identidad visual.
+  *(2026-09-05: invertido por nuevo requisito — el claro es el defecto, tema
+  editorial; el oscuro queda como opción. Primera visita sigue
+  `prefers-color-scheme`.)*
 - **Regeneración local del procedimiento en el frontend:** el backend calcula y
   el frontend solo pinta; las gráficas se repintan al cambiar tema con los datos
   ya recibidos (sin recalcular en el servidor).
+- **Tema claro editorial como identidad** (2026-09-05): el panel oscuro con cian
+  leía «hecho por IA»; papel cálido + tinta + un solo acento guinda + serif en
+  títulos lee «apunte de curso». Iconos SVG en sprite propio en vez de una
+  librería: cero dependencias y control total del trazo.
+- **Un solo ejemplo, el más completo** (2026-09-05): los 5 presets confundían;
+  queda rampa × pulso (Lección 3 ej. 2), que es el caso con más intervalos y
+  cubre todas las situaciones del método. Los demás eran subconjuntos suyos.
+- **Solución solo-matemática** (2026-09-05): el objetivo de la tarjeta Solución
+  es copiar rápido al cuaderno, no enseñar la teoría (para eso está la pestaña
+  Teoría). Por eso se eliminaron los textos guía del render y del texto
+  copiable, dejando únicamente la cadena de expresiones.
+- **Integrales (0)·(h) visibles en los tramos de cero** (2026-09-05): los
+  apuntes (Lección 3, p.14/23/30) escriben la integral con la señal en cero en
+  el primer intervalo y como integral entrante cuando la ventana móvil pasó el
+  último tramo de x; la herramienta lo replica para que lo copiado coincida
+  con lo que el docente espera en la hoja de respuesta.
 
 ## Decisiones técnicas
 

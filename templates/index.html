@@ -3,53 +3,83 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Convolución continua — Solucionador paso a paso</title>
-<!-- Tema ANTES del CSS para evitar parpadeo: oscuro por defecto; solo se usa
-     claro si el usuario lo eligió explícitamente (se guarda en localStorage). -->
-<script>try{document.documentElement.setAttribute('data-theme', localStorage.getItem('tema')==='light'?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}</script>
+<meta name="description" content="Solucionador de convolución continua paso a paso: h(t−τ), x(τ), intervalos, integrales y respuesta por tramos. Señales y Sistemas.">
+<title>Convolución continua — método en 5 pasos</title>
+<!-- Tema ANTES del CSS para evitar destello: guardado en localStorage; si
+     nunca se eligió, sigue la preferencia del sistema (claro por defecto). -->
+<script>try{var t=null;try{t=localStorage.getItem('tema')}catch(e){}
+if(t==='dark'||(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.setAttribute('data-theme','dark')}}catch(e){}</script>
+<meta name="theme-color" id="metaTema" content="#f7f6f2">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%238c2f39'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' fill='white' text-anchor='middle'%3E%E2%88%97%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
-<!-- UX-2: los 4 scripts usan `defer` en orden de documento (KaTeX -> auto-render
-     -> Plotly -> app.js). Con `defer` el navegador conserva el orden de ejecución,
-     así que app.js siempre ve window.katex/window.Plotly listos. Además app.js
-     re-renderiza en window 'load' como red de seguridad si un CDN falló/tardó. -->
+<!-- Los scripts van con `defer` en orden de documento (KaTeX -> auto-render
+     -> Plotly -> app.js), así app.js siempre ve window.katex/window.Plotly. -->
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
 <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js" integrity="sha384-cCVCZkAjYNxaYKbM8lsArLznDF/SvMFr1jcZrvOpSTCa0W40ZAdLzHCEulnUa5i7" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<!-- Sprite de iconos (trazo tipo Lucide, 24x24): se referencian con <use>. -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <defs>
+    <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M18 7V4H6l6 8-6 8h12v-3"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="m8 3 4 4-4 4"/><path d="M4 7h16"/><path d="m16 21-4-4 4-4"/><path d="M20 17H4"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+    <symbol id="i-waves" viewBox="0 0 24 24"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  </defs>
+</svg>
+
 <header class="topbar">
-  <div class="brand">
-    <div class="logo">∗</div>
-    <div>
-      <h1>Convolución continua · paso a paso</h1>
-      <p class="sub">Señales y Sistemas · Método en 5 pasos</p>
+  <div class="wrap topbar-in">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">∗</span>
+      <div>
+        <h1>Convolución continua</h1>
+        <p class="sub">Método en cinco pasos · Señales y Sistemas</p>
+      </div>
     </div>
+    <nav class="tabs" aria-label="Secciones">
+      <button data-tab="conv" class="active"><svg class="icon"><use href="#i-waves"/></svg>Convolución</button>
+      <button data-tab="integ"><span class="glyph">∫</span>Integrales</button>
+      <button data-tab="teoria"><svg class="icon"><use href="#i-book"/></svg>Teoría</button>
+      <button id="btnTema" class="theme-btn" type="button" aria-label="Cambiar tema"></button>
+    </nav>
   </div>
-  <nav class="tabs">
-    <button data-tab="conv" class="active"><span class="n">1</span> Convolución</button>
-    <button data-tab="integ"><span class="n">2</span> Integrales</button>
-    <button data-tab="teoria"><span class="n">3</span> Teoría</button>
-    <button id="btnTema" class="theme-btn" type="button" title="Cambiar a modo claro">☀️</button>
-  </nav>
 </header>
 
-<main>
+<main class="wrap">
 <!-- ================= CONVOLUCIÓN ================= -->
 <section id="tab-conv" class="tab active">
   <div class="layout">
     <div class="col-input">
       <div class="card">
         <div class="card-head">
-          <h2>Señales de entrada</h2>
-          <label class="preset">Preset
-            <select id="preset"></select>
-          </label>
+          <h2><svg class="icon h2-ic"><use href="#i-sigma"/></svg>Señales</h2>
+          <button id="resetEjemplo" class="ghost" type="button"><svg class="icon"><use href="#i-reset"/></svg>Restablecer ejemplo</button>
         </div>
         <p class="note" id="presetNota"></p>
 
         <div class="palette-block">
-          <div class="palette-title">Teclado matemático <span class="hint">— clic inserta en el campo enfocado</span></div>
+          <div class="palette-title">Símbolos <span class="hint">— se insertan donde estés escribiendo</span></div>
           <div class="palette" id="palette">
             <button data-ins="t">t</button>
             <button data-ins="tau">τ</button>
@@ -68,80 +98,71 @@
             <button data-ins="oo">∞</button>
             <button data-ins="-oo">−∞</button>
           </div>
-          <div class="templates">
-            <span class="hint">Plantillas:</span>
-            <button data-tpl="pulso">Pulso</button>
-            <button data-tpl="rampa">Rampa t</button>
-            <button data-tpl="expon">Exponencial</button>
-            <button data-tpl="escalon">Escalón</button>
-            <label class="hint">añadir a
-              <select id="tplTarget">
-                <option value="auto">auto</option>
-                <option value="x">x(t)</option>
-                <option value="h">h(t)</option>
-              </select>
-            </label>
-          </div>
-          <p class="hint">Puedes escribir <code>5t</code>, <code>2(t+1)</code>, <code>e^(-3t)</code>, <code>5e-3t</code>, <code>t^2</code>, <code>sen(t)</code>. Vista previa automática en cada tramo.</p>
+          <p class="hint">Escriba con soltura: <code>5t</code>, <code>2(t+1)</code>, <code>e^(-3t)</code>, <code>5e-3t</code>, <code>t^2</code>, <code>sen(t)</code>. Cada tramo se previsualiza al escribirlo.</p>
         </div>
 
         <div class="sig-block">
-          <div class="sig-head"><h3>x(t) <span class="hint">entrada</span></h3><button id="addX" class="ghost">+ tramo</button></div>
-          <div class="single-expr">
-            <input id="xSingle" placeholder="o pega la señal completa, ej: 3*exp(-2*t)*u(t)" spellcheck="false" autocomplete="off">
-            <button id="xToTramos" class="ghost" title="Sacar los tramos desde la señal con escalón">→ a tramos</button>
+          <div class="sig-head">
+            <h3>x(t) <span class="hint">entrada</span></h3>
+            <button id="addX" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Añadir tramo</button>
           </div>
-          <div class="hint" id="xSingleMsg"></div>
+          <div class="single-expr">
+            <input id="xSingle" placeholder="señal completa, ej: 3*exp(-2*t)*u(t)" spellcheck="false" autocomplete="off" aria-label="Señal x(t) completa">
+            <button id="xToTramos" class="ghost" title="Separar en tramos a partir del escalón"><svg class="icon"><use href="#i-split"/></svg>Separar en tramos</button>
+          </div>
+          <div class="hint msg" id="xSingleMsg" aria-live="polite"></div>
           <div id="xRows"></div>
         </div>
         <div class="sig-block">
-          <div class="sig-head"><h3>h(t) <span class="hint">respuesta al impulso</span></h3><button id="addH" class="ghost">+ tramo</button></div>
-          <div class="single-expr">
-            <input id="hSingle" placeholder="o pega la señal completa, ej: u(t)" spellcheck="false" autocomplete="off">
-            <button id="hToTramos" class="ghost" title="Sacar los tramos desde la señal con escalón">→ a tramos</button>
+          <div class="sig-head">
+            <h3>h(t) <span class="hint">respuesta al impulso</span></h3>
+            <button id="addH" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Añadir tramo</button>
           </div>
-          <div class="hint" id="hSingleMsg"></div>
+          <div class="single-expr">
+            <input id="hSingle" placeholder="señal completa, ej: u(t)" spellcheck="false" autocomplete="off" aria-label="Señal h(t) completa">
+            <button id="hToTramos" class="ghost" title="Separar en tramos a partir del escalón"><svg class="icon"><use href="#i-split"/></svg>Separar en tramos</button>
+          </div>
+          <div class="hint msg" id="hSingleMsg" aria-live="polite"></div>
           <div id="hRows"></div>
         </div>
 
-        <button id="resolver" class="primary big">Resolver convolución · 5 pasos</button>
-        <div id="loadingConv" class="loading" hidden>Calculando con SymPy…</div>
-        <div id="errConv" class="error"></div>
+        <button id="resolver" class="primary big"><svg class="icon"><use href="#i-sigma"/></svg>Resolver convolución</button>
+        <div id="loadingConv" class="loading" hidden><span class="spinner" aria-hidden="true"></span>Calculando con SymPy…</div>
+        <div id="errConv" class="error" role="alert"></div>
       </div>
     </div>
 
     <div class="col-out">
+      <div class="card" id="resultado" style="display:none">
+        <div class="card-head">
+          <h2><svg class="icon h2-ic"><use href="#i-check-circle"/></svg>Solución</h2>
+          <button id="btnCopiar" class="ghost" title="Copiar el procedimiento completo como texto"><svg class="icon"><use href="#i-copy"/></svg>Copiar procedimiento</button>
+        </div>
+        <div class="def" id="defConv"></div>
+        <div id="criterioFija"></div>
+        <h3 class="paso-h3"><span class="nchip">1</span> Obtener h(t−τ), la señal móvil <span class="hint">reflejo + corrimiento</span></h3><div id="p1"></div>
+        <h3 class="paso-h3"><span class="nchip">2</span> Obtener x(τ), la señal fija <span class="hint">cambio de variable</span></h3><div id="p2"></div>
+        <h3 class="paso-h3"><span class="nchip">3</span> Identificar los intervalos de t <span class="hint">dónde inicia y(t)</span></h3><div id="p3"></div>
+        <h3 class="paso-h3"><span class="nchip">4</span> Multiplicar x(τ)·h(t−τ) e integrar en τ</h3><div id="p4"></div>
+        <h3 class="paso-h3"><span class="nchip">5</span> Respuesta final por tramos</h3><div id="p5"></div>
+      </div>
+
       <div class="card">
-        <h2>Gráficas de entrada y salida</h2>
+        <h2><svg class="icon h2-ic"><use href="#i-chart"/></svg>Gráficas</h2>
         <div class="plots">
-          <div id="plotXH" class="plot"></div>
-          <div id="plotY" class="plot"></div>
+          <div id="plotXH" class="plot"><div class="plot-hint"><svg class="icon"><use href="#i-chart"/></svg>x(t) y h(t) aparecen al resolver la convolución</div></div>
+          <div id="plotY" class="plot"><div class="plot-hint"><svg class="icon"><use href="#i-chart"/></svg>y(t) aparece al resolver la convolución</div></div>
         </div>
       </div>
       <div class="card">
-        <h2>Solape en τ <span class="hint">arrastra t para ver h(t−τ) moverse</span></h2>
+        <h2><svg class="icon h2-ic"><use href="#i-sliders"/></svg>Solape en τ</h2>
+        <p class="hint">Mueva t y observe cómo se desplaza h(t−τ) sobre x(τ); el área sombreada es y(t).</p>
         <div class="slider-row">
           <input type="range" id="sliderT" min="-12" max="18" step="0.1" value="1" aria-label="Valor de t para el solape">
-          <div class="hint">El rango se ajusta solo a tus señales al resolver.</div>
           <div class="t-read">t = <b id="tVal">1</b> · área ≈ <b id="areaVal">—</b></div>
         </div>
         <div class="hint" id="regionRead"></div>
-        <div id="plotSolape" class="plot"></div>
-      </div>
-
-      <div class="card" id="resultado" style="display:none">
-        <div class="card-head">
-          <h2>Solución · 5 pasos <span class="hint">como en la guía de clase, sin saltarse nada</span></h2>
-          <button id="btnCopiar" class="ghost" title="Copiar el procedimiento completo como texto (para Word, notas, etc.)">📋 Copiar procedimiento</button>
-        </div>
-        <div class="def" id="defConv"></div>
-        <div class="stepper" id="stepper"></div>
-        <div id="criterioFija"></div>
-        <h3 class="paso-h3"><span class="nchip">1</span> h(t−τ) «móvil» — reflejo + corrimiento</h3><div id="p1"></div>
-        <h3 class="paso-h3"><span class="nchip">2</span> x(τ) «fija» — cambio de variable</h3><div id="p2"></div>
-        <h3 class="paso-h3"><span class="nchip">3</span> Identificar intervalos de t y de τ / dónde inicia</h3><div id="p3"></div>
-        <h3 class="paso-h3"><span class="nchip">4</span> Multiplicar x(τ)·h(t−τ) e integrar sobre τ</h3><div id="p4"></div>
-        <h3 class="paso-h3"><span class="nchip">5</span> ¿Fin o hay más intervalos? → respuesta final</h3><div id="p5"></div>
+        <div id="plotSolape" class="plot"><div class="plot-hint"><svg class="icon"><use href="#i-sliders"/></svg>Aparece al resolver, o al mover t después de resolver</div></div>
       </div>
     </div>
   </div>
@@ -151,7 +172,7 @@
 <section id="tab-integ" class="tab">
   <div class="layout single">
     <div class="card">
-      <h2>Integral paso a paso</h2>
+      <h2><span class="h2-ic glyph">∫</span>Integral paso a paso</h2>
       <div class="palette" id="palette2">
         <button data-ins="tau">τ</button>
         <button data-ins="t">t</button>
@@ -174,14 +195,11 @@
         <label>Límite inferior a <input id="intA" value="-4"></label>
         <label>Límite superior b <input id="intB" value="t"></label>
       </div>
-      <p class="hint">Vacía <b>a</b> y <b>b</b> para indefinida. Acepta <code>oo</code>, <code>tau^2*exp(-tau)</code>, <code>tau*sin(tau)</code>, <code>1/(1+tau^2)</code>.</p>
+      <p class="hint">Deje <b>a</b> y <b>b</b> vacíos para la integral indefinida. Acepta <code>oo</code>, <code>tau^2*exp(-tau)</code>, <code>tau*sin(tau)</code>, <code>1/(1+tau^2)</code>.</p>
       <div class="row">
-        <button id="resolverInt" class="primary">Resolver integral</button>
-        <button id="ejInt1" class="ghost">Ej: polinomio</button>
-        <button id="ejInt2" class="ghost">Ej: exp×polinomio</button>
-        <button id="ejInt3" class="ghost">Ej: trig</button>
+        <button id="resolverInt" class="primary"><svg class="icon"><use href="#i-sigma"/></svg>Resolver integral</button>
       </div>
-      <div id="errInt" class="error"></div>
+      <div id="errInt" class="error" role="alert"></div>
       <div id="intRes"></div>
     </div>
   </div>
@@ -192,69 +210,72 @@
   <div class="layout single">
     <div class="card">
       <div class="card-head">
-        <h2>Procedimiento matemático · 5 pasos</h2>
-        <button id="btnCopiarProc" class="ghost" title="Copiar el procedimiento general como texto">📋 Copiar</button>
+        <h2><svg class="icon h2-ic"><use href="#i-book"/></svg>Procedimiento general · 5 pasos</h2>
+        <button id="btnCopiarProc" class="ghost" title="Copiar el procedimiento general como texto"><svg class="icon"><use href="#i-copy"/></svg>Copiar</button>
       </div>
-      <p class="note">Sigue este algoritmo <b>en orden</b>; sirve para cualquier pareja de señales x(t), h(t) y para las integrales que aparezcan. Con \( \tau \) como variable de integración y \( t \) fijo.</p>
+      <p class="note">Siga este algoritmo <b>en orden</b>: sirve para cualquier pareja de señales x(t), h(t) y para las integrales que aparezcan. Con \( \tau \) como variable de integración y \( t \) fijo.</p>
       <div class="def">\( \displaystyle y(t)=x(t)*h(t)=\int_{-\infty}^{\infty}x(\tau)\,h(t-\tau)\,d\tau \)</div>
 
-      <h3 class="paso-h3"><span class="nchip">1</span> Obtener h(t−τ) «móvil» — reflejo + corrimiento</h3>
+      <h3 class="paso-h3"><span class="nchip">1</span> Obtener h(t−τ), la señal móvil — reflejo + corrimiento</h3>
       <ol class="steps">
-        <li>Escribe \(h_j(t)\) con su soporte: \(h_j(t)=f(t)\) si \(a_j\le t\le b_j\); \(0\) en otro caso.</li>
-        <li>Sustituye \(t\to t-\tau\) en la fórmula <b>y en el soporte</b>: \(a_j\le t-\tau\le b_j\).</li>
-        <li>Resta \(t\) en toda la desigualdad: \(a_j-t\le-\tau\le b_j-t\).</li>
-        <li>Multiplica por \(-1\) (¡las desigualdades se invierten!): \(t-b_j\le\tau\le t-a_j\).</li>
+        <li>Escriba \(h_j(t)\) con su soporte: \(h_j(t)=f(t)\) si \(a_j\le t\le b_j\); \(0\) en otro caso.</li>
+        <li>Sustituya \(t\to t-\tau\) en la fórmula <b>y en el soporte</b>: \(a_j\le t-\tau\le b_j\).</li>
+        <li>Reste \(t\) en toda la desigualdad: \(a_j-t\le-\tau\le b_j-t\).</li>
+        <li>Multiplique por \(-1\) (las desigualdades se invierten): \(t-b_j\le\tau\le t-a_j\).</li>
       </ol>
-      <p class="hint">→ \(h_j(t-\tau)\) solo está activo en \(t-b_j\le\tau\le t-a_j\).</p>
+      <p class="hint">Así, \(h_j(t-\tau)\) solo está activo en \(t-b_j\le\tau\le t-a_j\).</p>
 
-      <h3 class="paso-h3"><span class="nchip">2</span> Obtener x(τ) «fija» — cambio de variable</h3>
+      <h3 class="paso-h3"><span class="nchip">2</span> Obtener x(τ), la señal fija — cambio de variable</h3>
       <ol class="steps">
-        <li>Sustituye \(t\to\tau\): \(x_i(\tau)\) activo en \(a_i\le\tau\le b_i\).</li>
-        <li>Criterio de clase: se deja <b>fija</b> la de soporte más ancho y se refleja la otra; si conviene, intercambia x↔h. El resultado no cambia porque \(x*h=h*x\).</li>
+        <li>Sustituya \(t\to\tau\): \(x_i(\tau)\) activo en \(a_i\le\tau\le b_i\).</li>
+        <li>Conviene dejar <b>fija</b> la señal de soporte más ancho y reflejar la otra; si hace falta, intercambie x↔h. El resultado no cambia porque \(x*h=h*x\).</li>
       </ol>
 
-      <h3 class="paso-h3"><span class="nchip">3</span> Identificar intervalos de t y de τ — dónde inicia</h3>
+      <h3 class="paso-h3"><span class="nchip">3</span> Identificar los intervalos de t y de τ</h3>
       <ol class="steps">
-        <li><b>Puntos críticos:</b> \(t_c=(\text{borde de }x)+(\text{borde de }h)\), todas las combinaciones finitas; ordénalos.</li>
+        <li><b>Puntos críticos:</b> \(t_c=(\text{borde de }x)+(\text{borde de }h)\), todas las combinaciones finitas; ordénelos.</li>
         <li>Los críticos dividen la recta de \(t\) en intervalos; \(y(t)\) <b>inicia</b> donde aparece el primer solape.</li>
-        <li>En cada intervalo toma un \(t\) de prueba y obtén el solape en \(\tau\):<br>\(\;\)[\(\max(a_i,\,t-b_j)\), \(\min(b_i,\,t-a_j)\)] — si queda vacío → \(y=0\) en ese intervalo.</li>
+        <li>En cada intervalo tome un \(t\) de prueba y obtenga el solape en \(\tau\): \([\max(a_i,\,t-b_j),\,\min(b_i,\,t-a_j)]\) — si queda vacío, \(y=0\) en ese intervalo.</li>
       </ol>
 
-      <h3 class="paso-h3"><span class="nchip">4</span> Multiplicar e integrar — por cada intervalo con solape</h3>
+      <h3 class="paso-h3"><span class="nchip">4</span> Multiplicar e integrar, intervalo por intervalo</h3>
       <ol class="steps">
-        <li>Plantea la integral con los límites reales:<br>\( \displaystyle y(t)=\int_{lo}^{hi}\big(x_i(\tau)\big)\big(h_j(t-\tau)\big)\,d\tau \)<br>Si el solape «entra y sale» por tramos distintos: una integral <b>entrante</b> y una <b>saliente</b>, y se suman.</li>
-        <li>Expandir/simplificar el integrando <b>sin saltarse operaciones</b>.</li>
-        <li>Aplica la regla: \(\int \tau^n d\tau=\frac{\tau^{n+1}}{n+1}\) · \(\int e^{k\tau}d\tau=\frac{e^{k\tau}}{k}\) · \(\int \operatorname{sen}(k\tau)d\tau=-\frac{\cos(k\tau)}{k}\) · \(\int \cos(k\tau)d\tau=\frac{\operatorname{sen}(k\tau)}{k}\) · polinomio×exponencial → <b>integración por partes</b> (tabular).</li>
-        <li>Integra término a término → primitiva \(F(\tau)\).</li>
-        <li>Evalúa \(F(hi)\) y \(F(lo)\) <b>por separado</b>.</li>
-        <li>Resta (Teorema Fundamental del Cálculo): \(y=F(hi)-F(lo)\) y simplifica.</li>
+        <li>Plantee la integral con los límites reales: \( \displaystyle y(t)=\int_{lo}^{hi}\big(x_i(\tau)\big)\big(h_j(t-\tau)\big)\,d\tau \). Si el solape «entra y sale» por tramos distintos, escriba una integral entrante y una saliente, y súmelas.</li>
+        <li>Expanda y simplifique el integrando <b>sin saltarse operaciones</b>.</li>
+        <li>Aplique la regla: \(\int \tau^n d\tau=\frac{\tau^{n+1}}{n+1}\) · \(\int e^{k\tau}d\tau=\frac{e^{k\tau}}{k}\) · \(\int \operatorname{sen}(k\tau)d\tau=-\frac{\cos(k\tau)}{k}\) · \(\int \cos(k\tau)d\tau=\frac{\operatorname{sen}(k\tau)}{k}\) · polinomio×exponencial → <b>integración por partes</b> (tabular).</li>
+        <li>Integre término a término → primitiva \(F(\tau)\).</li>
+        <li>Evalúe \(F(hi)\) y \(F(lo)\) <b>por separado</b>.</li>
+        <li>Reste (Teorema Fundamental del Cálculo): \(y=F(hi)-F(lo)\) y simplifique.</li>
       </ol>
 
       <h3 class="paso-h3"><span class="nchip">5</span> ¿Fin o hay más intervalos?</h3>
       <ol class="steps">
-        <li>Tras cada intervalo pregúntate: ¿faltan intervalos por analizar? Si sí, repite los pasos 3–4.</li>
-        <li>Respuesta final <b>por tramos</b> (y, si se pide, forma compacta con escalones \(u(t)\)).</li>
+        <li>Tras cada intervalo pregúntese si faltan intervalos por analizar; si sí, repita los pasos 3–4.</li>
+        <li>Escriba la respuesta final <b>por tramos</b> (y, si se pide, la forma compacta con escalones \(u(t)\)).</li>
       </ol>
 
-      <h3>Adaptación a cualquier integral \( \int f\,d\tau \) (con o sin límites)</h3>
+      <h3 class="paso-h3"><span class="nchip">∫</span> Adaptación a cualquier integral \( \int f\,d\tau \) (con o sin límites)</h3>
       <ol class="steps">
         <li>Transcribir el integrando tal cual.</li>
         <li>Expandir y agrupar términos semejantes.</li>
         <li>Identificar la regla (potencia, exponencial, trigonométrica, partes).</li>
         <li>Integrar término a término → \(F(\tau)+C\).</li>
         <li><b>Verificar</b> derivando: \(dF/d\tau\) debe devolver el integrando.</li>
-        <li>Si hay límites: evalúa \(F(b)\) y \(F(a)\) por separado.</li>
-        <li>Resta (TFC): \(\int_a^b f\,d\tau=F(b)-F(a)\), simplificando al final.</li>
+        <li>Si hay límites: evaluar \(F(b)\) y \(F(a)\) por separado.</li>
+        <li>Restar (TFC): \(\int_a^b f\,d\tau=F(b)-F(a)\), simplificando al final.</li>
       </ol>
 
-      <p>Videos: <a href="https://www.youtube.com/playlist?list=PLt250Vkobc9wRscNIgFeJntAuo0EUB32J" target="_blank" rel="noopener">playlist Convolución (YouTube)</a> · 3A/3B continua, parte 2 transformaciones.</p>
-      <h3>Presets</h3>
-      <ul id="listaPresets"></ul>
+      <p class="final-link"><svg class="icon"><use href="#i-link"/></svg>Videos de apoyo: <a href="https://www.youtube.com/playlist?list=PLt250Vkobc9wRscNIgFeJntAuo0EUB32J" target="_blank" rel="noopener">playlist Convolución (YouTube)</a>.</p>
     </div>
   </div>
 </section>
 </main>
-<footer><small>Convolución continua · SymPy + Plotly + KaTeX</small></footer>
+<footer>
+  <div class="wrap footer-in">
+    <small>Convolución continua · método en cinco pasos</small>
+    <small>SymPy · KaTeX · Plotly</small>
+  </div>
+</footer>
 <script defer src="/static/app.js"></script>
 </body>
 </html>

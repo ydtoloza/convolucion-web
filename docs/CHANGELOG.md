@@ -3,6 +3,44 @@
 Registro de todo lo trabajado sobre este proyecto. Las etiquetas entre paréntesis
 (`BUG-x`, `OPT-x`, `DESIGN-x`) son las que se usan en los comentarios del código.
 
+## 2026-09-05 — Rediseño editorial, ejemplo único y salida para el cuaderno
+
+- **Rediseño completo de la interfaz** (se retira el look «panel oscuro + cian»):
+  tema claro editorial (papel cálido, tinta, acento guinda), tipografías Inter
+  (UI) y Source Serif 4 (títulos) vía Google Fonts, iconografía SVG propia
+  (sprite inline estilo Lucide, sin dependencias nuevas), favicon, cabecera fija
+  con desenfoque y pestañas subrayadas.
+- **Modo oscuro invertido:** ahora el claro es el tema por defecto y el oscuro es
+  opcional. Tokens oscuros cálidos en `:root[data-theme="dark"]`, botón sol/luna,
+  preferencia en `localStorage`, `prefers-color-scheme` en la primera visita,
+  script anti-destello en `<head>`, paletas Plotly por tema y `meta theme-color`
+  dinámico. La impresión siempre sale en claro.
+- **Un solo ejemplo de trabajo:** de los 5 presets queda el más completo (rampa ×
+  pulso, Lección 3 ej. 2: críticos −4/0/4/8, cinco tramos, tres integrales). Se
+  carga al abrir, con botón «Restablecer ejemplo». Se retiran las plantillas
+  (pulso/rampa/exponencial/escalón) y los botones «Ej:» de la pestaña Integrales.
+- **Solución solo-matemática para copiar al cuaderno:** fuera los textos guía del
+  procedimiento (numeraciones ①–⑥, explicaciones de reglas, etiquetas
+  entrante/saliente y las preguntas «¿Fin o hay más intervalos?»). Cada intervalo
+  queda como la cadena planteo → integrando expandido → F(τ) → evaluación. El
+  texto del botón «Copiar procedimiento» también pasó a formato cuaderno.
+- **Integrales con la señal en cero, como en los apuntes** (Lección 3, p.14/23/30):
+  los tramos sin solape muestran su integral explícita `(0)·(h) dτ = 0`
+  (∫_{−∞}^t al inicio, ∫_t^∞ al final) y, cuando la ventana móvil ya pasó el
+  último tramo de x, se escribe la integral entrante `∫_4^t (0)(3) dτ = 0`
+  antes de la saliente. Los resultados no cambian (esas integrales valen 0).
+- **Orden de bloques:** la tarjeta Solución encabeza la columna de resultados;
+  gráficas y solape quedan como apoyo, con textos-guía en las gráficas vacías.
+- **Detalles de producción:** `aria-label` en botones de solo icono, estados
+  `:focus-visible`, spinner de carga, slider con relleno de progreso, numeración
+  de tramos por contadores CSS, estilos de impresión y `prefers-reduced-motion`.
+- Bugs corregidos durante el rediseño: contenedor `#criterioFija` faltante en el
+  nuevo HTML (rompía el render de la solución), desborde de Plotly por
+  `display:grid` en `.plot`, texto-guía de gráficas vacías que no se retiraba al
+  dibujar, spinner siempre visible (`display:flex` anulaba `hidden`), clave
+  `integrando_txt` inexistente y condición simbólica (`t > …`) al detectar la
+  integral entrante cero.
+
 ## 2026-09-04 — Modo oscuro por defecto
 
 - **Tema oscuro como tema por defecto.** `style.css` reescrito con variables CSS:

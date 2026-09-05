@@ -1,5 +1,4 @@
 // Editor de ecuaciones con vista previa LaTeX + interfaz renovada
-let PRESETS = {};
 let lastX = [], lastH = [];
 let lastRegiones = [], lastCriticos = [];
 let lastProcTxt = '';
@@ -31,41 +30,57 @@ function renderAll(el) {
   }
 }
 
-// ---------- tema (oscuro por defecto) ----------
-// El atributo data-theme se fija ANTES del CSS con un script inline en <head>;
+// ---------- tema (claro por defecto; oscuro con data-theme="dark") ----------
+// El atributo data-theme se fija ANTES del CSS (script inline en <head>);
 // aquí solo se alterna, se persiste y se repintan las gráficas.
-const THEME_KEY = 'tema';
+const PLOT_PALETTES = {
+  light: {
+    paper: '#ffffff', plot: '#ffffff', font: '#211d19',
+    grid: '#eceae2', zero: '#c9c4ba',
+    x: '#6f6a62', h: '#8c2f39', y: '#211d19',
+    marker: '#8c2f39', crit: '#c9c4ba', prodFill: 'rgba(140,47,57,.14)'
+  },
+  dark: {
+    paper: '#211d19', plot: '#211d19', font: '#ede8df',
+    grid: '#332d27', zero: '#4a433b',
+    x: '#a39b8f', h: '#d68f95', y: '#ede8df',
+    marker: '#d68f95', crit: '#4a433b', prodFill: 'rgba(214,143,149,.16)'
+  }
+};
 function currentTheme() {
-  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
 }
-function plotTheme() {
-  return currentTheme() === 'dark'
-    ? { paper: '#101a2e', plot: '#101a2e', font: '#e2e8f0', grid: '#1e293b', zero: '#3b4f6e', marker: '#38bdf8' }
-    : { paper: '#ffffff', plot: '#ffffff', font: '#0f172a', grid: '#e2e8f0', zero: '#94a3b8', marker: '#0284c7' };
-}
+const plotColors = () => PLOT_PALETTES[currentTheme()];
 function plotLayout(extra) {
-  const t = plotTheme();
+  const c = plotColors();
   return Object.assign({
     margin: { t: 36, r: 10, l: 44, b: 36 },
-    paper_bgcolor: t.paper, plot_bgcolor: t.plot,
-    font: { color: t.font },
-    xaxis: { gridcolor: t.grid, zerolinecolor: t.zero },
-    yaxis: { gridcolor: t.grid, zerolinecolor: t.zero }
+    paper_bgcolor: c.paper, plot_bgcolor: c.plot,
+    font: { color: c.font },
+    xaxis: { gridcolor: c.grid, zerolinecolor: c.zero },
+    yaxis: { gridcolor: c.grid, zerolinecolor: c.zero }
   }, extra || {});
+}
+const THEME_META = { light: '#f7f6f2', dark: '#161311' };
+function syncThemeButton() {
+  const b = $('#btnTema');
+  if (!b) return;
+  const dark = currentTheme() === 'dark';
+  b.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#i-${dark ? 'sun' : 'moon'}"/></svg>`;
+  b.title = dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+  b.setAttribute('aria-label', b.title);
 }
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
-  try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* modo privado */ }
-  const b = $('#btnTema');
-  if (b) {
-    b.textContent = t === 'light' ? '🌙' : '☀️';
-    b.title = t === 'light' ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro';
-  }
+  try { localStorage.setItem('tema', t); } catch (e) { /* modo privado */ }
+  syncThemeButton();
+  const meta = document.getElementById('metaTema');
+  if (meta) meta.content = THEME_META[t];
   // repintar gráficas si hay datos
   if (window.Plotly && lastPlotData) {
     plotAll(lastPlotData);
     if (lastSolapeData) renderSolape(lastSolapeData.tau, lastSolapeData.x, lastSolapeData.h, lastSolapeData.prod, lastSolapeData.t0);
-    if (lastPlotData && $('#plotY').data) { try { Plotly.relayout('plotY', { shapes: yShapes(parseFloat($('#sliderT').value)) }); } catch (e) { /* noop */ } }
+    if ($('#plotY').data) { try { Plotly.relayout('plotY', { shapes: yShapes(parseFloat($('#sliderT').value)) }); } catch (e) { /* noop */ } }
   }
 }
 
@@ -111,14 +126,12 @@ function tramoRow(container, seg) {
   const bVal = esc(seg?.b ?? 'oo');
   const eVal = esc(seg?.expr ?? '1');
   d.innerHTML = `
-    <div class="tramo-top">
-      <label>desde a<input class="a" value="${aVal}" spellcheck="false"></label>
-      <label>hasta b<input class="b" value="${bVal}" spellcheck="false"></label>
-      <button class="del" title="Quitar tramo">✕</button>
+    <div class="tramo-grid">
+      <label>Desde a<input class="a" value="${aVal}" spellcheck="false" aria-label="Inicio del tramo"></label>
+      <label>Hasta b<input class="b" value="${bVal}" spellcheck="false" aria-label="Fin del tramo"></label>
+      <label class="expr">Fórmula f(t)<input class="e expr-in" value="${eVal}" spellcheck="false" autocomplete="off" aria-label="Fórmula del tramo"></label>
+      <button class="del" type="button" title="Quitar tramo" aria-label="Quitar tramo"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
     </div>
-    <label class="expr">fórmula f(t) <span class="hint">ej: 5*exp(-3*t) · 2t · e^(-3t) · t^2</span>
-      <input class="e expr-in" value="${eVal}" spellcheck="false" autocomplete="off">
-    </label>
     <div class="preview"><span class="hint">vista previa…</span></div>`;
   d.querySelector('.del').onclick = () => d.remove();
   container.appendChild(d);
@@ -144,14 +157,14 @@ async function previewTramo(row) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
     box.classList.remove('bad');
-    box.innerHTML = `<span class="ok-tag">✓</span> `;
+    box.innerHTML = `<span class="ok-tag"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span> `;
     const inner = document.createElement('span');  // BUG-8: sin nodo huérfano
     box.appendChild(inner);
     renderLatex(inner, j.tramo_latex, true);
   } catch (e) {
     box.classList.add('bad');
     // BUG-6: el error del backend incluye la expr del usuario -> escapar.
-    box.innerHTML = `<span class="hint">⚠ ${esc(String(e.message || e).slice(0, 160))}</span>`;
+    box.innerHTML = `<span class="hint">${esc(String(e.message || e).slice(0, 160))}</span>`;
   }
 }
 function debounce(fn, ms) {
@@ -191,7 +204,7 @@ function bindCopyButton(btn, getText) {
   btn.addEventListener('click', async () => {
     const prev = btn.textContent;
     const ok = await copyText(getText());
-    btn.textContent = ok ? '✓ Copiado' : '⚠ No se pudo copiar';
+    btn.textContent = ok ? 'Copiado' : 'No se pudo copiar';
     btn.classList.toggle('copy-ok', ok);
     setTimeout(() => { btn.textContent = prev; btn.classList.remove('copy-ok'); }, 1600);
   });
@@ -207,7 +220,7 @@ async function descomponerSingle(cual) {
   const rowsId = cual === 'x' ? 'xRows' : 'hRows';
   const expr = inp.value;
   if (!expr.trim()) { msg.textContent = 'Escribe primero la señal, ej: 3*exp(-2*t)*u(t)'; return; }
-  msg.textContent = 'Descomponiendo…';
+  msg.textContent = 'Separando en tramos…';
   try {
     const r = await fetch('/api/descomponer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expr, var: 't' }) });
     const j = await r.json();
@@ -215,42 +228,46 @@ async function descomponerSingle(cual) {
     $('#' + rowsId).innerHTML = '';
     j.segs.forEach(s => tramoRow($('#' + rowsId), s));
     fitSliderToSegs(j.segs);
-    msg.textContent = `✓ ${j.n} tramo${j.n === 1 ? '' : 's'}: revisa abajo y pulsa Resolver.`;
+    msg.textContent = `${j.n} tramo${j.n === 1 ? '' : 's'} separado${j.n === 1 ? '' : 's'}: revísalos abajo y pulsa Resolver.`;
   } catch (e) {
-    msg.textContent = '⚠ ' + friendlyError(e.message || e);
+    msg.textContent = friendlyError(e.message || e);
   }
 }
-// BUG-7: con manejo de errores de red y mensaje al usuario
-async function loadPresets() {
+// ---------- ejemplo de trabajo (único) ----------
+// El servidor expone un solo ejemplo (el caso más completo del curso); se
+// carga al abrir la página y se puede restablecer con el botón de la tarjeta.
+let EJEMPLO = null;
+async function loadEjemplo() {
   try {
     const r = await fetch('/api/presets');
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    PRESETS = await r.json();
+    const data = await r.json();
+    EJEMPLO = Object.values(data)[0] || null;
   } catch (e) {
-    console.error('No se pudieron cargar los presets:', e);
-    $('#presetNota').textContent = '⚠ Sin conexión con el servidor: revisa que app.py esté corriendo.';
+    console.error('No se pudo cargar el ejemplo:', e);
+    $('#presetNota').textContent = 'Sin conexión con el servidor: revisa que app.py esté corriendo.';
     return;
   }
-  const sel = $('#preset'); sel.innerHTML = '';
-  const ul = $('#listaPresets'); if (ul) ul.innerHTML = '';
-  Object.entries(PRESETS).forEach(([k, v]) => {
-    const o = document.createElement('option'); o.value = k; o.textContent = v.nombre; sel.appendChild(o);
-    if (ul) { const li = document.createElement('li'); li.textContent = v.nombre + ' — ' + v.nota; ul.appendChild(li); }
-  });
-  sel.onchange = () => applyPreset(sel.value);
-  applyPreset(Object.keys(PRESETS)[2] || Object.keys(PRESETS)[0]);
+  aplicarEjemplo();
 }
-function applyPreset(k) {
-  const p = PRESETS[k]; if (!p) return;
-  $('#preset').value = k;  // BUG-13: sincronizar el select con el preset aplicado
-  $('#presetNota').textContent = p.nota || '';
+function aplicarEjemplo() {
+  if (!EJEMPLO) return;
+  $('#presetNota').textContent = `Ejemplo cargado: ${EJEMPLO.nombre}. ${EJEMPLO.nota || ''}`;
   // limpiar también las cajas de "señal completa" para no mezclar entradas viejas
   $('#xSingle').value = ''; $('#hSingle').value = '';
   $('#xSingleMsg').textContent = ''; $('#hSingleMsg').textContent = '';
   $('#xRows').innerHTML = ''; $('#hRows').innerHTML = '';
-  p.x.forEach(s => tramoRow($('#xRows'), s));
-  p.h.forEach(s => tramoRow($('#hRows'), s));
-  fitSliderToSegs([...p.x, ...p.h]);  // DESIGN-6: rango inicial según el preset
+  EJEMPLO.x.forEach(s => tramoRow($('#xRows'), s));
+  EJEMPLO.h.forEach(s => tramoRow($('#hRows'), s));
+  fitSliderToSegs([...EJEMPLO.x, ...EJEMPLO.h]);  // rango inicial según el ejemplo
+}
+// relleno de progreso del slider (el track usa la variable CSS --fill)
+function paintSlider() {
+  const s = $('#sliderT');
+  const min = parseFloat(s.min), max = parseFloat(s.max), v = parseFloat(s.value);
+  if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+    s.style.setProperty('--fill', (100 * (v - min) / (max - min)).toFixed(2) + '%');
+  }
 }
 // DESIGN-6: el slider nace del soporte de las señales, no de un rango fijo
 function fitSliderToSegs(segs) {
@@ -259,23 +276,9 @@ function fitSliderToSegs(segs) {
   if (!nums.length) { s.min = -5; s.max = 5; s.value = 0; }
   else { s.min = Math.min(...nums) - 2; s.max = Math.max(...nums) + 2; s.value = nums[0]; }
   $('#tVal').textContent = s.value;
+  paintSlider();
 }
-// BUG-9 + UX-8: destino explícito (selector) o por defecto según tipo
-const TPL_DEFAULT = { pulso: '#xRows', expon: '#xRows', rampa: '#hRows', escalon: '#hRows' };
-const TPL_DATA = {
-  pulso: { a: '0', b: '8', expr: '1' },
-  rampa: { a: '0', b: '8', expr: 't' },
-  expon: { a: '0', b: 'oo', expr: '5*exp(-3*t)' },
-  escalon: { a: '0', b: 'oo', expr: '1' },
-};
-function addTemplate(kind) {
-  const sel = $('#tplTarget');
-  const where = sel && sel.value !== 'auto' ? (sel.value === 'x' ? '#xRows' : '#hRows')
-    : (TPL_DEFAULT[kind] ?? '#xRows');
-  if (!TPL_DATA[kind]) return;
-  tramoRow($(where), TPL_DATA[kind]);
-  $(where).lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
+// (las plantillas de señal se retiraron: el ejemplo único cubre ese papel)
 
 // ---------- convolución ----------
 // Criterio: fija la más grande. Intercambia x↔h (filas + cajas de señal
@@ -291,25 +294,19 @@ function intercambiarSenales() {
   fitSliderToSegs([...h, ...x]);
   resolver();
 }
-function setStepper(done) {
-  const names = ['h(t−τ)', 'x(τ)', 'Regiones', 'Integrar', 'y(t)'];
-  $('#stepper').innerHTML = names.map((n, i) =>
-    `<span class="st ${i < done ? 'done' : ''}">${i < done ? '✓' : (i + 1)} · ${n}</span>`).join('');
-}
 // UX-3: errores técnicos de SymPy traducidos a guía para el estudiante
 function friendlyError(msg) {
   msg = String(msg || 'Error desconocido');
-  if (/interpretar/i.test(msg)) return msg + '\n💡 Revisa la sintaxis: usa * para multiplicar (5*t), exp() para exponenciales y ^ para potencias.';
-  if (/dimension|shape|broadcast/i.test(msg)) return msg + '\n💡 Parece un problema numérico en la gráfica; prueba simplificar los tramos.';
-  if (/Failed to fetch|NetworkError|HTTP/i.test(msg)) return msg + '\n💡 No hay conexión con el servidor: verifica que app.py esté corriendo en http://127.0.0.1:5000.';
+  if (/interpretar/i.test(msg)) return msg + '\nRevisa la sintaxis: usa * para multiplicar (5*t), exp() para exponenciales y ^ para potencias.';
+  if (/dimension|shape|broadcast/i.test(msg)) return msg + '\nParece un problema numérico en la gráfica; prueba simplificar los tramos.';
+  if (/Failed to fetch|NetworkError|HTTP/i.test(msg)) return msg + '\nNo hay conexión con el servidor: verifica que app.py esté corriendo en http://127.0.0.1:5000.';
   return msg;
 }
 async function resolver() {
   const btn = $('#resolver');
   $('#errConv').textContent = '';
   $('#loadingConv').hidden = false;
-  btn.disabled = true;  // UX-4: evita doble envío y condiciones de carrera
-  setStepper(0);
+  btn.disabled = true;  // evita doble envío y condiciones de carrera
   try {
     const x = readSegs('xRows'), h = readSegs('hRows');
     if (!x.length || !h.length) throw new Error('Agrega al menos un tramo en x(t) y uno en h(t).');
@@ -318,7 +315,6 @@ async function resolver() {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
     $('#resultado').style.display = 'block';
-    setStepper(5);
     renderLatex($('#defConv'), 'y(t)=\\int_{-\\infty}^{\\infty}x(\\tau)\\,h(t-\\tau)\\,d\\tau', true);
     lastRegiones = j.regiones || [];
     lastCriticos = j.criticos || [];
@@ -327,9 +323,9 @@ async function resolver() {
     const cb = $('#criterioFija');
     if (j.criterio && j.criterio.mensaje) {
       const rec = j.criterio.recomendada;
-      const cls = rec === 'x' ? 'paso ok' : (rec === 'h' ? 'paso warn' : 'paso');
+      const cls = rec === 'h' ? 'paso warn' : 'paso';
       cb.innerHTML = `<div class="${cls}">${esc(j.criterio.mensaje)}</div>` +
-        (rec === 'h' ? `<button id="btnSwap" class="ghost">⇄ Intercambiar x↔h y resolver</button>` : '');
+        (rec === 'h' ? `<button id="btnSwap" class="ghost"><svg class="icon" aria-hidden="true"><use href="#i-swap"/></svg>Intercambiar x ↔ h y resolver</button>` : '');
       const bs = $('#btnSwap');
       if (bs) bs.onclick = intercambiarSenales;
     } else { cb.innerHTML = ''; }
@@ -337,66 +333,64 @@ async function resolver() {
     const c = j.criticos || [];
     const s = $('#sliderT');
     if (c.length) { s.min = Math.min(...c) - 2; s.max = Math.max(...c) + 2; s.value = c[0]; }
-    $('#p1').innerHTML = j.paso1.map((s2, i) =>
-      `<details class="paso" ${i === 0 ? 'open' : ''}><summary>h<sub>${i + 1}</sub>(t−τ)</summary>
-       ① Original: <span class="m">\\(${s2.original}\\)</span><br>
-       ② Sustituir t→t−τ: <span class="m">\\(${s2.sustituir}\\)</span><br>
-       ③ Restar t: <span class="m">\\(${s2.restar_t}\\)</span><br>
-       ④ ×(−1): <span class="m">\\(${s2.mult_menos1}\\)</span><br>
-       ✔ Final: <span class="m">\\(${s2.final}\\)</span></details>`).join('');
-    $('#p2').innerHTML = j.paso2.map((s2, i) =>
-      `<details class="paso" ${i === 0 ? 'open' : ''}><summary>x<sub>${i + 1}</sub>(τ)</summary>
-       ① Original: <span class="m">\\(${s2.original}\\)</span><br>
-       ② Cambio t→τ: <span class="m">\\(${s2.sustituir}\\)</span><br>
-       ✔ Final: <span class="m">\\(${s2.final}\\)</span></details>`).join('');
-    // Paso 3 (como la guía): críticos = suma de bordes; dividen la recta; dónde inicia
+    paintSlider();
+    // Salida pensada para copiar al cuaderno: solo matemática, sin texto guía.
+    $('#p1').innerHTML = j.paso1.map(s2 =>
+      `<div class="paso math">
+        <span class="m">\\(${s2.original}\\)</span>
+        <span class="m flecha" aria-hidden="true">⟹</span>
+        <span class="m">\\(${s2.final}\\)</span>
+      </div>`).join('');
+    $('#p2').innerHTML = j.paso2.map(s2 =>
+      `<div class="paso math">
+        <span class="m">\\(${s2.original}\\)</span>
+        <span class="m flecha" aria-hidden="true">⟹</span>
+        <span class="m">\\(${s2.final}\\)</span>
+      </div>`).join('');
+    // Paso 3: solo los puntos críticos y el inicio de y(t)
     $('#p3').innerHTML =
-      `<div class="paso">
-       <b>Puntos críticos</b> = cada borde de x(τ) + cada borde de h(t−τ):<br>
-       <span class="m">\\(t_c \\in \\{${c.length ? c.map(v => Number(v).toFixed(2)).join(',\\;') : '0'}\\}\\)</span><br>
-       Los críticos dividen la recta de <b>t</b> en <b>${j.regiones.length} intervalo${j.regiones.length === 1 ? '' : 's'}</b>: se analiza uno por uno.<br>
-       <b>y(t) inicia</b> donde aparece el primer solape: <span class="m">\\(t = ${fmtT(j.t_inicio)}\\)</span>
-       <div class="mini-chips">${j.regiones.map((rr, k) => `<span class="chip">${k + 1}) <span class="m">\\(${rr.cond_latex}\\)</span></span>`).join('')}</div>
-       </div>`;
-    // Paso 4 (como la guía): por intervalo -> integral entrante/saliente, TFC y
-    // la pregunta del ciclo "¿Fin o hay más intervalos?" tras CADA intervalo.
-    $('#p4').innerHTML = j.regiones.map((rr, k) => {
-      const head = `<div class="region-head"><span class="rnum">Intervalo ${k + 1} de ${j.regiones.length}</span><span class="m">\\(${rr.cond_latex}\\)</span></div>`;
-      const loop = k < j.regiones.length - 1
-        ? `<div class="loop-q"><span class="lq">⟳ ¿Fin o hay más intervalos?</span> <b>SÍ</b> — falta <span class="m">\\(${j.regiones[k + 1].cond_latex}\\)</span></div>`
-        : `<div class="loop-q"><span class="lq">⟳ ¿Fin o hay más intervalos?</span> <b>NO</b> — todos cubiertos → ir al Paso 5.</div>`;
+      `<div class="paso math">
+        <span class="m">\\(t_c \\in \\{${c.length ? c.map(v => Number(v).toFixed(2)).join(',\\;') : '0'}\\}\\)</span>` +
+      (c.length ? `<span class="m">\\(t_{\\text{inicio}} = ${fmtT(j.t_inicio)}\\)</span>` : '') +
+      `</div>`;
+    // Paso 4: por intervalo, la cadena matemática completa (planteo →
+    // integrando expandido → primitiva → evaluación), sin texto.
+    $('#p4').innerHTML = j.regiones.map((rr) => {
+      const head = `<div class="region-head"><span class="m">\\(${rr.cond_latex}\\)</span></div>`;
       if (!rr.hay_solape) {
-        return `<div class="region cero">${head}
-          Sin solape: <span class="m">\\(x(\\tau)\\,h(t-\\tau) = 0\\)</span> en todo τ<br>
-          <span class="m">\\(y(t) = \\int (0)\\,d\\tau = 0\\)</span>
-          <div class="res-line"><b>⇒ <span class="m">\\(y(t)=0\\)</span></b> para <span class="m">\\(${rr.cond_latex}\\)</span></div>${loop}</div>`;
+        const lineaCero = rr.cero_latex
+          ? `<div class="paso math"><span class="m">\\(${rr.cero_latex}\\)</span></div>`
+          : '';
+        return `<div class="region cero">${head}${lineaCero}
+          <div class="res-line"><span class="m">\\(y(t)=0\\)</span></div></div>`;
       }
-      const ints = rr.integrales.map((g, m) => {
-        const nI = rr.integrales.length;
-        const tag = nI > 1 ? (m === 0 ? 'Integral entrante' : (m === nI - 1 ? 'Integral saliente' : 'Integral intermedia')) : 'Integral';
+      const ints = rr.integrales.map((g) => {
+        // tramo donde la señal ya vale 0 (como en los apuntes): ∫ (0)·(h) = 0
+        if (g.cero) {
+          return `<div class="paso math">
+            <span class="m">\\(y(t)=\\int_{${g.low_latex}}^{${g.high_latex}}\\left(0\\right)\\!\\left(${g.h_shift_latex}\\right)d\\tau=0\\)</span>
+          </div>`;
+        }
         const completaTex = `y(t)=\\int_{${g.low_latex}}^{${g.high_latex}}\\left(${g.x_tau_latex}\\right)\\!\\left(${g.h_shift_latex}\\right)d\\tau`;
-        return `<details class="paso" ${m === 0 ? 'open' : ''}><summary>${tag} ${rr.integrales.length > 1 ? (m + 1) : ''} · <span class="m">\\(${g.par_latex || ''}\\)</span></summary>
-         ① Planteo con límites reales: <span class="m">\\(${completaTex}\\)</span><br>
-         ② Expandir el producto (sin saltarse nada): <span class="m">\\(${g.integrando_latex}\\)</span><br>
-         ③ Regla: ${esc(g.regla_detalle || '')}<br>
-         ④ Primitiva término a término: <span class="m">\\(F(\\tau)=${g.primitiva_latex}\\)</span><br>
-         ⑤ Evaluar: arriba <span class="m">\\(F(${g.high_latex})=${g.Fsup_latex || ''}\\)</span> · abajo <span class="m">\\(F(${g.low_latex})=${g.Finf_latex || ''}\\)</span><br>
-         ⑥ Restar (TFC): <span class="m">\\(${g.resta_latex || g.eval_latex}\\)</span></details>`;
+        const expandidaTex = `\\int_{${g.low_latex}}^{${g.high_latex}} ${g.integrando_latex}\\,d\\tau`;
+        return `<div class="paso math">
+          <span class="m">\\(${completaTex}\\)</span>
+          <span class="m">\\(= ${expandidaTex}\\)</span>
+          <span class="m">\\(F(\\tau)=${g.primitiva_latex}\\)</span>
+          <span class="m">\\(${g.eval_latex}\\)</span>
+        </div>`;
       }).join('');
-      const limites = rr.integrales.map(g => `<span class="m">\\(\\tau \\in [${g.low_latex},\\,${g.high_latex}]\\)</span>`).join(' + ');
-      const etiqueta = rr.integrales.length > 1 ? 'Integrales entrante + saliente' : 'Integral entrante';
-      return `<div class="region">${head}
-        <div class="entrante">${etiqueta} en τ: ${limites}</div>${ints}
-        <div class="res-line"><b>⇒ <span class="m">\\(y(t)=${rr.resultado_latex}\\)</span></b> para <span class="m">\\(${rr.cond_latex}\\)</span></div>${loop}</div>`;
+      return `<div class="region">${head}${ints}
+        <div class="res-line"><span class="m">\\(y(t)=${rr.resultado_latex}\\)</span></div></div>`;
     }).join('');
     $('#p5').innerHTML =
-      `<div class="paso">Respuesta final por tramos:<br><span class="m">\\[${j.y_tramos_latex}\\]</span></div>` +
-      `<div class="paso">Forma compacta con escalón u(t):<br><span class="m">\\[${j.y_escalones_latex}\\]</span></div>`;
+      `<div class="paso math"><span class="hint">por tramos</span><span class="m">\\[${j.y_tramos_latex}\\]</span></div>` +
+      `<div class="paso math"><span class="hint">forma compacta con u(t)</span><span class="m">\\[${j.y_escalones_latex}\\]</span></div>`;
     renderAll($('#resultado'));
     $('#resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
     updateSolape();
   } catch (e) {
-    $('#errConv').textContent = '⚠ ' + friendlyError(e.message || e);
+    $('#errConv').textContent = friendlyError(e.message || e);
   } finally {
     $('#loadingConv').hidden = true;
     $('#resolver').disabled = false;
@@ -420,33 +414,40 @@ function condPlain(r) {
 }
 // líneas verticales en la gráfica y(t): críticos (punteadas) + t actual (sólida)
 function yShapes(t0) {
-  const t = plotTheme();
   const shapes = lastCriticos.map(v => ({
     type: 'line', x0: v, x1: v, y0: 0, y1: 1, yref: 'paper',
-    line: { color: t.zero, width: 1, dash: 'dot' }, hoverinfo: 'skip'
+    line: { color: plotColors().crit, width: 1, dash: 'dot' }, hoverinfo: 'skip'
   }));
   if (t0 != null && Number.isFinite(t0)) {
     shapes.push({
       type: 'line', x0: t0, x1: t0, y0: 0, y1: 1, yref: 'paper',
-      line: { color: t.marker, width: 2 }, hoverinfo: 'skip'
+      line: { color: plotColors().marker, width: 1.5 }, hoverinfo: 'skip'
     });
   }
   return shapes;
 }
+// texto-guía dentro de una gráfica vacía; se retira al dibujar encima
+function quitarHint(id) {
+  const h = document.querySelector('#' + id + ' .plot-hint');
+  if (h) h.remove();
+}
 function plotAll(j) {
   lastPlotData = j;
+  quitarHint('plotXH'); quitarHint('plotY');
   Plotly.newPlot('plotXH', [
-    { x: j.grid, y: j.x_vals, name: 'x(t)', type: 'scatter' },
-    { x: j.grid, y: j.h_vals, name: 'h(t)', type: 'scatter' }
+    { x: j.grid, y: j.x_vals, name: 'x(t)', type: 'scatter', line: { color: plotColors().x, width: 2 } },
+    { x: j.grid, y: j.h_vals, name: 'h(t)', type: 'scatter', line: { color: plotColors().h, width: 2 } }
   ], plotLayout({ title: 'x(t) y h(t)' }), { responsive: true });
-  Plotly.newPlot('plotY', [{ x: j.grid, y: j.y_vals, name: 'y(t)', type: 'scatter', line: { width: 3 } }],
+  Plotly.newPlot('plotY', [{ x: j.grid, y: j.y_vals, name: 'y(t)', type: 'scatter', line: { color: plotColors().y, width: 2.5 } }],
     plotLayout({ title: 'y(t) = x(t) ∗ h(t)', shapes: yShapes(null) }), { responsive: true });
 }
 function renderSolape(tau, xv, hv, prod, t0) {
+  quitarHint('plotSolape');
   Plotly.newPlot('plotSolape', [
-    { x: tau, y: xv, name: 'x(τ)', type: 'scatter' },
-    { x: tau, y: hv, name: `h(${t0}−τ)`, type: 'scatter' },
-    { x: tau, y: prod, name: 'producto', fill: 'tozeroy', type: 'scatter' }
+    { x: tau, y: xv, name: 'x(τ)', type: 'scatter', line: { color: plotColors().x, width: 2 } },
+    { x: tau, y: hv, name: `h(${t0}−τ)`, type: 'scatter', line: { color: plotColors().h, width: 2 } },
+    { x: tau, y: prod, name: 'producto', type: 'scatter', fill: 'tozeroy',
+      fillcolor: plotColors().prodFill, line: { color: plotColors().h, width: 1.5 } }
   ], plotLayout({ title: `Solape en τ · t = ${t0}` }), { responsive: true });
 }
 async function updateSolape() {
@@ -488,7 +489,7 @@ async function previewIntegral() {
   } catch (e) {
     box.classList.add('bad');
     // BUG-6: igual que previewTramo, escapar el mensaje (lleva input del usuario).
-    box.innerHTML = `<span class="hint">⚠ ${esc(String(e.message || e).slice(0, 140))}</span>`;
+    box.innerHTML = `<span class="hint">${esc(String(e.message || e).slice(0, 140))}</span>`;
   }
 }
 async function resolverInt() {
@@ -500,13 +501,13 @@ async function resolverInt() {
     if (!j.ok) throw new Error(j.error);
     const d = $('#intRes');
     // DESIGN-7: mostrar si la primitiva quedó verificada (dF/dτ == f)
-    const badge = j.verificada === true ? '<div class="paso ok">✓ Primitiva verificada: su derivada coincide con el integrando.</div>'
-      : j.verificada === false ? '<div class="paso warn">⚠ No se pudo verificar automáticamente la primitiva: revísala derivando a mano.</div>' : '';
+    const badge = j.verificada === true ? '<div class="paso ok">Primitiva verificada: su derivada coincide con el integrando.</div>'
+      : j.verificada === false ? '<div class="paso warn">No se pudo verificar automáticamente la primitiva: revísala derivando a mano.</div>' : '';
     d.innerHTML = badge + j.pasos.map(p => `<div class="paso"><b>${esc(p.titulo)}</b><br>${p.detalle}<br><span class="m">\\[${p.latex}\\]</span></div>`).join('') +
       (j.es_definida ? `<div class="paso"><b>Resultado:</b> <span class="m">\\[${j.valor_latex}\\]</span>${j.valor_num != null ? ` (≈ ${Number(j.valor_num).toFixed(6)})` : ''}</div>`
         : `<div class="paso"><b>Resultado:</b> <span class="m">\\[${j.primitiva_latex}\\]</span></div>`);
     renderAll(d);
-  } catch (e) { $('#errInt').textContent = '⚠ ' + friendlyError(e.message || e); }
+  } catch (e) { $('#errInt').textContent = friendlyError(e.message || e); }
 }
 
 // ---------- procedimiento general (texto copiable, pestaña Teoría) ----------
@@ -560,16 +561,17 @@ ADAPTACIÓN A CUALQUIER INTEGRAL ∫ f(u) du (con o sin límites):
   (7) Restar (TFC):  ∫[a → b] f(u) du = F(b) − F(a), simplificar.`;
 
 // ---------- wiring ----------
-// (el botón de tema va aparte: no es una pestaña)
 $$('.tabs button[data-tab]').forEach(b => b.onclick = () => {
   $$('.tabs button[data-tab]').forEach(x => x.classList.remove('active'));
   $$('.tab').forEach(x => x.classList.remove('active'));
   b.classList.add('active'); document.getElementById('tab-' + b.dataset.tab).classList.add('active');
 });
-$('#btnTema').onclick = () => applyTheme(currentTheme() === 'light' ? 'dark' : 'light');
-applyTheme(currentTheme());  // sincroniza icono/título con el tema ya fijado en <head>
+// (el botón de tema va aparte: no es una pestaña)
+$('#btnTema').onclick = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+syncThemeButton();  // sincroniza icono/título con el tema fijado en <head>
 $('#addX').onclick = () => tramoRow($('#xRows'), { a: '0', b: 'oo', expr: '1' });
 $('#addH').onclick = () => tramoRow($('#hRows'), { a: '0', b: 'oo', expr: '1' });
+$('#resetEjemplo').onclick = aplicarEjemplo;
 $('#xToTramos').onclick = () => descomponerSingle('x');
 $('#hToTramos').onclick = () => descomponerSingle('h');
 $('#xSingle').addEventListener('keydown', (e) => { if (e.key === 'Enter') descomponerSingle('x'); });
@@ -583,22 +585,15 @@ $('#resolverInt').onclick = resolverInt;
 // Slider en vivo: el número se actualiza al instante y la gráfica sigue al
 // dedo con throttle (máx. 1 petición/120 ms); al soltar se hace la final.
 const updateSolapeLive = throttle(updateSolape, 120);
-$('#sliderT').oninput = (e) => { $('#tVal').textContent = e.target.value; $('#areaVal').textContent = '…'; updateSolapeLive(); };
+$('#sliderT').oninput = (e) => { $('#tVal').textContent = e.target.value; $('#areaVal').textContent = '…'; paintSlider(); updateSolapeLive(); };
 $('#sliderT').onchange = updateSolape;
-$('#ejInt1').onclick = () => { $('#intExpr').value = '6*tau'; $('#intA').value = '-4'; $('#intB').value = 't'; previewIntegral(); };
-$('#ejInt2').onclick = () => { $('#intExpr').value = 'tau^2*exp(-tau)'; $('#intA').value = ''; $('#intB').value = ''; previewIntegral(); };
-$('#ejInt3').onclick = () => { $('#intExpr').value = 'tau*sin(tau)'; $('#intA').value = '0'; $('#intB').value = 'pi'; previewIntegral(); };
-document.querySelector('.templates').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-tpl]'); if (!b) return;
-  addTemplate(b.dataset.tpl);
-});
 bindPalette('palette'); bindPalette('palette2');
 $('#intExpr').addEventListener('input', debounce(previewIntegral, 350));
 $('#intVar').onchange = previewIntegral;
 // botones de copiar: solución concreta + procedimiento general (teoría)
 bindCopyButton($('#btnCopiar'), () => lastProcTxt);
 bindCopyButton($('#btnCopiarProc'), () => PROC_GENERAL_TXT);
-loadPresets().then(() => previewIntegral());
+loadEjemplo().then(() => previewIntegral());
 renderAll(document.body);
 // KaTeX carga diferido: re-renderizar cuando esté listo
 window.addEventListener('load', () => {

@@ -267,39 +267,22 @@ def _segs_txt(segs, var_txt='t'):
     return '{ ' + ' ;  '.join(parts) + ' }'
 
 
-# ---------------------------------------------------------------- presets
-PRESETS = {
-    "lecc3_ej1": {
-        "nombre": "Ej.1 — Exponencial × Escalón  (x=e^{-2t}u(t), h=u(t))",
-        "x": [{"a": "0", "b": "oo", "expr": "exp(-2*t)"}],
-        "h": [{"a": "0", "b": "oo", "expr": "1"}],
-        "nota": "Equivale al Ejemplo 1 del PDF (con a=2). Resultado: y=0 si t<0; y=(1/2)(1-e^{-2t}) si t>=0."
-    },
-    "lecc3_ej2": {
-        "nombre": "Ej.2 — Rampa × Pulso  (x=2t en [-4,4], h=3 en [0,4])",
-        "x": [{"a": "-4", "b": "4", "expr": "2*t"}],
-        "h": [{"a": "0", "b": "4", "expr": "3"}],
-        "nota": "Ejemplo 2 del PDF con todo el desarrollo de 4 intervalos."
-    },
-    "taller_ej1": {
-        "nombre": "Taller · Ej.1 — x=5e^{-3t}u(t), h=u(t)",
-        "x": [{"a": "0", "b": "oo", "expr": "5*exp(-3*t)"}],
-        "h": [{"a": "0", "b": "oo", "expr": "1"}],
-        "nota": "Salida esperada: y=(5/3)(1-e^{-3t})u(t)."
-    },
-    "taller_ej2": {
-        "nombre": "Taller · Ej.2 — x=1 en (0,8), h=t en (0,8)",
-        "x": [{"a": "0", "b": "8", "expr": "1"}],
-        "h": [{"a": "0", "b": "8", "expr": "t"}],
-        "nota": "Soporte y en [0,16]. Tramos: t²/2 y 8t-t²/2."
-    },
-    "taller_ej3": {
-        "nombre": "Taller · Ej.3 — x=1 en (-10,0), h=t en (0,10)",
-        "x": [{"a": "-10", "b": "0", "expr": "1"}],
-        "h": [{"a": "0", "b": "10", "expr": "t"}],
-        "nota": "Soporte y en [-10,10]. Pico 50 en t=0."
-    },
+# ---------------------------------------------------------------- ejemplo
+# Un solo ejemplo de trabajo: el caso más completo del curso (rampa × pulso,
+# Lección 3, ejemplo 2). Es el que más intervalos exige: puntos críticos
+# {-4, 0, 4, 8} -> 5 tramos, 3 de ellos con integral.
+EJEMPLO = {
+    "nombre": "Rampa × pulso",
+    "x": [{"a": "-4", "b": "4", "expr": "2*t"}],
+    "h": [{"a": "0", "b": "4", "expr": "3"}],
+    "nota": ("x(t) = 2t en [−4, 4] y h(t) = 3 en [0, 4]. Es el caso con más "
+             "intervalos del taller: puntos críticos en t = −4, 0, 4, 8, "
+             "cinco tramos y tres integrales. Ejemplo 2 de la Lección 3."),
 }
+
+# Compatibilidad: la ruta /api/presets y las plantillas siguen sirviendo un
+# diccionario con la misma estructura de antes, ahora con un único ejemplo.
+PRESETS = {"ejemplo": EJEMPLO}
 
 
 # ------------------------------------------------- motor de convolución
@@ -364,10 +347,10 @@ def criterio_fija(x_segs, h_segs):
         msg = (f"Criterio: x(t) y h(t) miden lo mismo (ancho {txt(x_inf, x_w)}); "
                f"da igual cuál se deja fija. Resultado idéntico (x∗h = h∗x).")
     elif rec == 'x':
-        msg = (f"Criterio ✓: x(t) es la más grande (ancho {txt(x_inf, x_w)} vs {txt(h_inf, h_w)}) "
+        msg = (f"Criterio: x(t) es la más grande (ancho {txt(x_inf, x_w)} vs {txt(h_inf, h_w)}) "
                f"y ya está fija; h(t−τ) es la móvil. Resultado idéntico (x∗h = h∗x).")
     else:
-        msg = (f"Criterio 💡: h(t) es la más grande (ancho {txt(h_inf, h_w)} vs {txt(x_inf, x_w)}); "
+        msg = (f"Criterio: h(t) es la más grande (ancho {txt(h_inf, h_w)} vs {txt(x_inf, x_w)}); "
                f"conviene fijarla e intercambiar las señales. El resultado no cambia (x∗h = h∗x).")
     return {'fija_actual': 'x', 'recomendada': rec,
             'x_txt': txt(x_inf, x_w), 'h_txt': txt(h_inf, h_w), 'mensaje': msg}
@@ -592,67 +575,41 @@ def overlaps_for_t(x_segs, h_segs, tmid):
 
 
 def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones):
-    """Procedimiento completo en texto plano (unicode), listo para copiar
-    tal cual a la hoja de respuesta. Sigue el formato de la guía de clase:
-    5 pasos, con el ciclo '¿fin o hay más intervalos?' tras cada intervalo."""
+    """Procedimiento en texto plano (unicode), listo para copiar al cuaderno:
+    solo matemática, una línea por paso, sin explicaciones."""
     L = []
     ap = L.append
-    ap('CONVOLUCIÓN  y(t) = x(t) ∗ h(t) = ∫ x(τ)·h(t−τ) dτ')
+    ap('y(t) = x(t) ∗ h(t) = ∫ x(τ)·h(t−τ) dτ')
     ap('')
-    ap('Datos')
-    ap(f'  x(t) = {_segs_txt(x_segs)}')
-    ap(f'  h(t) = {_segs_txt(h_segs)}')
+    ap('x(t) = ' + _segs_txt(x_segs))
+    ap('h(t) = ' + _segs_txt(h_segs))
     ap('')
-    ap('PASO 1 · Obtener h(t−τ) «móvil» (reflejo + corrimiento)')
     for p in p1:
-        for ln in p['txt']:
-            ap('  ' + ln)
-        ap('')
-    ap('PASO 2 · Obtener x(τ) «fija» (cambio de variable t→τ)')
+        ap(p['txt'][-1].replace('OK  ', ''))
     for p in p2:
-        for ln in p['txt']:
-            ap('  ' + ln)
-        ap('')
-    crit_txt = ', '.join(_txt_num(c) for c in crit) if crit else '(sin críticos finitos)'
-    ap('PASO 3 · Identificar intervalos de t y de τ (dónde inicia)')
-    ap(f'  Puntos críticos = borde de x + borde de h:  t = {crit_txt}')
-    ap(f'  Los críticos dividen la recta de t en {len(regiones)} intervalo(s), se analiza uno por uno.')
+        ap(p['txt'][-1].replace('OK  ', ''))
+    ap('t_c = {' + (', '.join(_txt_num(c) for c in crit) if crit else '0') + '}')
     if crit:
-        ap(f'  y(t) inicia donde aparece el primer solape:  t = {_txt_num(min(crit))}')
+        ap('y(t) inicia en t = ' + _txt_num(min(crit)))
     ap('')
-    ap('PASO 4 · Multiplicar x(τ)·h(t−τ) e integrar sobre τ (por intervalo)')
-    n = len(regiones)
-    for k, r in enumerate(regiones):
-        ap(f'  Intervalo {k + 1} de {n}: tiempo de y(t):  {r["cond_txt"]}')
+    for r in regiones:
         if not r['hay_solape']:
-            ap('    No hay solape: el producto x(τ)·h(t−τ) es 0 en todo τ.')
-            ap('    y(t) = ∫ (0) dτ = 0')
-        else:
-            varios = len(r['integrales']) > 1
-            nI = len(r['integrales'])
-            for m, g in enumerate(r['integrales']):
-                if not varios:
-                    tag = 'integral entrante'
-                elif m == 0:
-                    tag = 'integral entrante'
-                elif m == nI - 1:
-                    tag = 'integral saliente'
-                else:
-                    tag = 'integral intermedia'
-                ap(f'    {tag} (par x_{g["par"].split("*")[0][1:]}·h_{g["par"].split("*")[1][1:]}):'
-                   f'  τ va de {g["low_txt"]} a {g["high_txt"]}')
-                ap(f'      y(t) = ∫ [{g["low_txt"]} → {g["high_txt"]}] ({g["x_tau_txt"]})·({g["h_shift_txt"]}) dτ')
-                ap(f'           = ({g["primitiva_txt"]})  evaluado de {g["low_txt"]} a {g["high_txt"]}')
-                ap(f'           = ({g["Fsup_txt"]}) − ({g["Finf_txt"]}) = {g["valor_txt"]}')
-        ap(f'    ⇒ y(t) = {r["resultado_txt"]}   para   {r["cond_txt"]}')
-        if k < n - 1:
-            ap(f'    ¿Fin o hay más intervalos? SÍ — falta: {regiones[k + 1]["cond_txt"]}')
-            ap('')
-        else:
-            ap('    ¿Fin o hay más intervalos? NO — todos los intervalos están cubiertos.')
-            ap('')
-    ap('PASO 5 · Respuesta final por tramos')
-    ap('  y(t) = { ' + ' ;  '.join(
+            if r.get('cero_txt'):
+                ap(f"y(t) = {r['cero_txt']} = 0   si   {r['cond_txt']}")
+            else:
+                ap(f"y(t) = 0   si   {r['cond_txt']}")
+            continue
+        for g in r['integrales']:
+            if g.get('cero'):
+                ap(f"y(t) = ∫[{g['low_txt']} → {g['high_txt']}] (0)·({g['h_shift_txt']}) dτ = 0")
+                continue
+            ap(f"y(t) = ∫[{g['low_txt']} → {g['high_txt']}] ({g['x_tau_txt']})·({g['h_shift_txt']}) dτ")
+            ap(f"     = ∫[{g['low_txt']} → {g['high_txt']}] {g['integrando_txt']} dτ")
+            ap(f"     F(τ) = {g['primitiva_txt']}")
+            ap(f"     = ({g['Fsup_txt']}) − ({g['Finf_txt']}) = {g['valor_txt']}")
+        ap(f"⇒ y(t) = {r['resultado_txt']}   si   {r['cond_txt']}")
+        ap('')
+    ap('y(t) = { ' + ' ;  '.join(
         f"{r['resultado_txt']}  si  {r['cond_txt']}" for r in regiones) + ' }')
     return '\n'.join(L)
 
@@ -692,11 +649,26 @@ def solve_convolution_from_segs(x_segs, h_segs):
         ultimo = (k == len(bounds) - 2)
         cond = intervalo_t_latex(lo, hi, primero=(k == 0), ultimo=ultimo)
         if not ov:
+            # Como en los apuntes (Lección 3, ej. 2, p.23): el tramo sin solape
+            # no queda como un simple «y=0», se muestra la integral con la
+            # señal en cero — (0)·(h) al inicio (x aún no empieza) y (0)·(h)
+            # al final (x ya se apagó).
+            cero_latex = cero_txt = ''
+            if h_segs:
+                h1 = latex(h_segs[0]['expr'].subs(t, t - tau))
+                h1_txt = _txt_expr(h_segs[0]['expr'].subs(t, t - tau))
+                if k == 0:
+                    cero_latex = rf'y(t)=\int_{{-\infty}}^{{t}}\left(0\right)\!\left({h1}\right)d\tau=0'
+                    cero_txt = f'∫[−∞ → t] (0)·({h1_txt}) dτ'
+                elif k == len(bounds) - 2:
+                    cero_latex = rf'y(t)=\int_{{t}}^{{\infty}}\left(0\right)\!\left({h1}\right)d\tau=0'
+                    cero_txt = f'∫[t → ∞] (0)·({h1_txt}) dτ'
             regiones.append({
                 'k': k, 't_lo': lo, 't_hi': hi, 'cond_latex': cond,
                 'cond_txt': _cond_txt(lo, hi, ultimo),
                 'hay_solape': False,
                 'explicacion': r'En este intervalo \(x(\tau)\) y \(h(t-\tau)\) no se solapan: el producto es \(0\) en todo \(\tau\).',
+                'cero_latex': cero_latex, 'cero_txt': cero_txt,
                 'integrales': [],
                 'resultado': sp.Integer(0),
                 'resultado_latex': '0',
@@ -705,12 +677,32 @@ def solve_convolution_from_segs(x_segs, h_segs):
             continue
         integrales = []
         total = sp.Integer(0)
+        vistos_cero = set()
         for o in ov:
             i, j = o['i'], o['j']
-            xe = x_segs[i]['expr'].subs(t, tau)
-            he = h_segs[j]['expr'].subs(t, t - tau)
+            xs, hs = x_segs[i], h_segs[j]
+            xe = xs['expr'].subs(t, tau)
+            he = hs['expr'].subs(t, t - tau)
             # OPT-1: expand (barato) en vez de simplify (costoso) en intermedios
             integrando = sp.expand(xe * he)
+            # Como en los apuntes (Lección 3, p.30-31): cuando la ventana móvil
+            # ya se salió por la derecha del último tramo de x, esa parte de la
+            # integral entrante vale 0 y se escribe explícita: ∫ (0)·(h) dτ = 0.
+            if (i == len(x_segs) - 1 and math.isfinite(hs['a_num'])
+                    and math.isfinite(xs['b_num'])
+                    and tmid - hs['a_num'] > xs['b_num'] + 1e-9):
+                lo_z, hi_z = xs['b'], t - hs['a']
+                clave = (str(lo_z), str(hi_z))
+                if clave not in vistos_cero:
+                    vistos_cero.add(clave)
+                    integrales.append({
+                        'par': f"x{i+1}*h{j+1}",
+                        'cero': True,
+                        'low_latex': latex(lo_z), 'high_latex': latex(hi_z),
+                        'h_shift_latex': latex(he),
+                        'low_txt': _txt_expr(lo_z), 'high_txt': _txt_expr(hi_z),
+                        'h_shift_txt': _txt_expr(he),
+                    })
             # primitiva (una sola vez por par; se reutiliza en cada parte)
             try:
                 F = sp.integrate(integrando, tau)
@@ -752,7 +744,8 @@ def solve_convolution_from_segs(x_segs, h_segs):
                     'x_tau_latex': latex(xe), 'h_shift_latex': latex(he),
                     'low_latex': latex(low_sym), 'high_latex': latex(high_sym),
                     'integrando_latex': latex(integrando),
-                    'regla_detalle': regla_integrando(integrando, tau),
+                    'regla_integrando': regla_integrando(integrando, tau),
+                    'integrando_txt': _txt_expr(integrando),
                     'primitiva_latex': latex(F) + r' + C',
                     'eval_latex': latex(F) + r'\Big|_{' + latex(low_sym) + r'}^{' + latex(high_sym) + r'} = ' + latex(val),
                     'Fsup_latex': latex(F_upper),
@@ -1147,6 +1140,7 @@ def api_convolve():
                 'cond_txt': r['cond_txt'],
                 'hay_solape': r['hay_solape'],
                 'explicacion': r['explicacion'],
+                'cero_latex': r.get('cero_latex', ''),
                 'integrales': r['integrales'],
                 'resultado_latex': r['resultado_latex'],
                 'resultado_txt': r['resultado_txt'],
