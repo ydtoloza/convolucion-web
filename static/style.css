@@ -194,6 +194,8 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;bac
 .paso.math .hint{display:block;margin-bottom:4px}
 .paso.ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok)}
 .paso.warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn)}
+#avisosConv .paso.warn{display:flex;align-items:flex-start;gap:9px;line-height:1.55}
+#avisosConv .paso.warn .icon{width:15px;height:15px;margin-top:3.5px}
 details.paso summary{cursor:pointer;font-weight:600;display:flex;align-items:center;gap:7px;user-select:none;list-style:none}
 details.paso summary::-webkit-details-marker{display:none}
 details.paso summary .chev{width:14px;height:14px;color:var(--muted);transition:transform var(--tr)}

@@ -347,12 +347,20 @@ async function resolver() {
         <span class="m flecha" aria-hidden="true">⟹</span>
         <span class="m">\\(${s2.final}\\)</span>
       </div>`).join('');
-    // Paso 3: solo los puntos críticos y el inicio de y(t)
-    $('#p3').innerHTML =
-      `<div class="paso math">
-        <span class="m">\\(t_c \\in \\{${c.length ? c.map(v => Number(v).toFixed(2)).join(',\\;') : '0'}\\}\\)</span>` +
-      (c.length ? `<span class="m">\\(t_{\\text{inicio}} = ${fmtT(j.t_inicio)}\\)</span>` : '') +
-      `</div>`;
+    // Paso 3: puntos críticos reales; si no hay (sin bordes finitos que
+    // sumar) la recta de t no se divide — no se inventa t_c = {0}.
+    $('#p3').innerHTML = c.length
+      ? `<div class="paso math">
+          <span class="m">\\(t_c \\in \\{${c.map(v => Number(v).toFixed(2)).join(',\\;')}\\}\\)</span>` +
+        (j.t_inicio != null ? `<span class="m">\\(t_{\\text{inicio}} = ${fmtT(j.t_inicio)}\\)</span>` : '') +
+        `</div>`
+      : `<div class="paso math">
+          <span class="hint">sin puntos críticos (no hay bordes finitos que sumar): un único intervalo de t</span>
+        </div>`;
+    // BUG-15: avisos de convergencia — si una integral no converge se dice
+    // aquí y por qué, en vez de presentar ∞ como respuesta por tramos.
+    $('#avisosConv').innerHTML = (j.avisos || []).map(a =>
+      `<div class="paso warn"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>${esc(a)}</div>`).join('');
     // Paso 4: por intervalo, la cadena matemática completa (planteo →
     // integrando expandido → primitiva → evaluación), sin texto.
     $('#p4').innerHTML = j.regiones.map((rr) => {
@@ -380,12 +388,18 @@ async function resolver() {
           <span class="m">\\(${g.eval_latex}\\)</span>
         </div>`;
       }).join('');
-      return `<div class="region">${head}${ints}
-        <div class="res-line"><span class="m">\\(y(t)=${rr.resultado_latex}\\)</span></div></div>`;
+      // BUG-15: región con integral divergente -> «no converge» + causa,
+      // en lugar de un valor ∞ disfrazado de respuesta
+      const resLine = rr.diverge
+        ? `<div class="res-line"><span class="m">\\(y(t)=\\text{no converge}\\)</span></div>
+           <div class="hint">${esc(rr.aviso_txt || '')}</div>`
+        : `<div class="res-line"><span class="m">\\(y(t)=${rr.resultado_latex}\\)</span></div>`;
+      return `<div class="region">${head}${ints}${resLine}</div>`;
     }).join('');
     $('#p5').innerHTML =
       `<div class="paso math"><span class="hint">por tramos</span><span class="m">\\[${j.y_tramos_latex}\\]</span></div>` +
-      `<div class="paso math"><span class="hint">forma compacta con u(t)</span><span class="m">\\[${j.y_escalones_latex}\\]</span></div>`;
+      // la forma compacta con u(t) se omite si alguna integral no converge
+      (j.y_escalones_latex ? `<div class="paso math"><span class="hint">forma compacta con u(t)</span><span class="m">\\[${j.y_escalones_latex}\\]</span></div>` : '');
     renderAll($('#resultado'));
     $('#resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
     updateSolape();
@@ -408,6 +422,7 @@ function regionDeT(t0) {
   return -1;
 }
 function condPlain(r) {
+  if (r.t_lo == null && r.t_hi == null) return 'todo t';
   if (r.t_lo == null) return `t < ${r.t_hi_str}`;
   if (r.t_hi == null) return `t ≥ ${r.t_lo_str}`;
   return `${r.t_lo_str} ≤ t < ${r.t_hi_str}`;
@@ -459,12 +474,16 @@ async function updateSolape() {
   const k = regionDeT(t0);
   $('#regionRead').textContent = k >= 0
     ? `Intervalo ${k + 1} de ${lastRegiones.length} · ${condPlain(lastRegiones[k])}` : '';
+  // BUG-15: si la integral de este intervalo no converge, el área no es finita
+  // (el recorte numérico de la ventana daría un valor engañoso)
+  const divergeAqui = k >= 0 && lastRegiones[k].diverge;
+  if (divergeAqui) $('#areaVal').textContent = 'no converge';
   // marcador de t en la gráfica y(t)
   if ($('#plotY').data) { try { Plotly.relayout('plotY', { shapes: yShapes(t0) }); } catch (e) { /* noop */ } }
   try {
     const r = await fetch('/api/solape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x: lastX, h: lastH, t0 }) });
     const j = await r.json(); if (!j.ok) return;
-    $('#areaVal').textContent = j.area_trapz.toFixed(4);
+    if (!divergeAqui) $('#areaVal').textContent = j.area_trapz.toFixed(4);
     lastSolapeData = { tau: j.tau, x: j.x, h: j.h, prod: j.prod, t0 };
     renderSolape(j.tau, j.x, j.h, j.prod, t0);
   } catch (e) { /* silencioso */ }

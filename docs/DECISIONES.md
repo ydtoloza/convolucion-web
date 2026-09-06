@@ -63,6 +63,16 @@ más allá de oscuro/claro.
   el primer intervalo y como integral entrante cuando la ventana móvil pasó el
   último tramo de x; la herramienta lo replica para que lo copiado coincida
   con lo que el docente espera en la hoja de respuesta.
+- **Una integral que no converge NO se resuelve: se reporta** (2026-09-06,
+  BUG-15). El método de la guía supone que x(τ)·h(t−τ) se anula en las colas
+  infinitas; si el usuario define un tramo infinito cuya fórmula no decae
+  (p. ej. 5e^(−3t) «desde −∞»), la integral diverge y presentar «y(t)=∞ por
+  tramos» sería un resultado falso. La región se marca «no converge» con la
+  causa (lado y límite del integrando) y la corrección sugerida del tramo,
+  pero el motor no reescribe la entrada por su cuenta: corregir los tramos es
+  decisión del usuario (por eso el aviso menciona el botón «Separar en
+  tramos»). El cálculo en sí no cambió: los casos convergentes dan exactamente
+  los mismos valores que antes.
 
 ## Decisiones técnicas
 

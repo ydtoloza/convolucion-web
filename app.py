@@ -210,7 +210,10 @@ def cond_var_latex(var, a, b):
 
 
 def tramo_cases_latex(nombre, ex, a, b, var):
-    """Bloque cases 'f(var) = {expr, cond; 0, e.o.c.}' con condición natural."""
+    """Bloque cases 'f(var) = {expr, cond; 0, e.o.c.}' con condición natural.
+    Si el tramo cubre toda la recta no hay 'e.o.c.': f = expr, var ∈ ℝ."""
+    if a == -sp.oo and b == sp.oo:
+        return rf"{nombre} = {latex(ex)}, \quad {cond_var_latex(var, a, b)}"
     return (rf"{nombre} = \begin{{cases}} {latex(ex)}, & {cond_var_latex(var, a, b)} \\ "
             rf"0, & \text{{e.o.c.}} \end{{cases}}")
 
@@ -259,8 +262,20 @@ def _ineq_txt(a, b, var_txt='t'):
     return f'{_txt_expr(a)} ≤ {var_txt} ≤ {_txt_expr(b)}'
 
 
+def _soporte_txt(a, b, var_txt='t'):
+    """Soporte en texto plano; un tramo que cubre toda la recta es 'todo var'
+    (sin '; 0 en otro caso', que allí no aplica)."""
+    if a == -sp.oo and b == sp.oo:
+        return f'todo {var_txt}'
+    return _ineq_txt(a, b, var_txt)
+
+
 def _segs_txt(segs, var_txt='t'):
-    """Señal por tramos en texto plano: '{expr si cond; 0 en otro caso}'."""
+    """Señal por tramos en texto plano: '{expr si cond; 0 en otro caso}'.
+    Si un tramo cubre toda la recta, la señal es simplemente esa fórmula."""
+    for s in segs:
+        if s['a_num'] == float('-inf') and s['b_num'] == float('inf'):
+            return _txt_expr(s['expr'])
     parts = [f'{_txt_expr(s["expr"])}  si  {_ineq_txt(s["a"], s["b"], var_txt)}'
              for s in segs]
     parts.append('0 en otro caso')
@@ -517,14 +532,16 @@ def paso2_x(x_segs):
         ax, bx, ex = s['a'], s['b'], s['expr']
         ex_tau = sp.simplify(ex.subs(t, tau))
         n = j + 1
+        todo_r = (ax == -sp.oo and bx == sp.oo)
+        cola = '' if todo_r else ' ; 0 en otro caso'
         pasos.append({
             'original': tramo_cases_latex(rf"x_{{{n}}}(t)", ex, ax, bx, t),
             'sustituir': rf"x_{{{n}}}(\tau) = {latex(ex_tau)}, \quad {cond_var_latex(tau, ax, bx)}",
             'final': tramo_cases_latex(rf"x_{{{n}}}(\tau)", ex_tau, ax, bx, tau),
             'txt': [
-                f"x{n}(t) = {_txt_expr(ex)}   si   {_ineq_txt(ax, bx)} ; 0 en otro caso",
-                f"(1) Cambio de variable t→τ:  x{n}(τ) = {_txt_expr(ex_tau)}   con   {_ineq_txt(ax, bx, 'τ')}",
-                f"OK  x{n}(τ) = {_txt_expr(ex_tau)}   si   {_ineq_txt(ax, bx, 'τ')} ; 0 en otro caso",
+                f"x{n}(t) = {_txt_expr(ex)}   si   {_soporte_txt(ax, bx)}{cola}",
+                f"(1) Cambio de variable t→τ:  x{n}(τ) = {_txt_expr(ex_tau)}   con   {_soporte_txt(ax, bx, 'τ')}",
+                f"OK  x{n}(τ) = {_txt_expr(ex_tau)}   si   {_soporte_txt(ax, bx, 'τ')}{cola}",
             ],
         })
     return pasos
@@ -588,16 +605,34 @@ def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones):
         ap(p['txt'][-1].replace('OK  ', ''))
     for p in p2:
         ap(p['txt'][-1].replace('OK  ', ''))
-    ap('t_c = {' + (', '.join(_txt_num(c) for c in crit) if crit else '0') + '}')
+    # BUG-15: sin críticos no se inventa t_c = {0}; se dice que hay un único
+    # intervalo (los críticos son sumas de bordes finitos; si no hay, la recta
+    # de t no se divide).
     if crit:
+        ap('t_c = {' + ', '.join(_txt_num(c) for c in crit) + '}')
         ap('y(t) inicia en t = ' + _txt_num(min(crit)))
+    else:
+        ap('No hay puntos críticos (no hay bordes finitos que sumar): un único intervalo de t')
     ap('')
+    hay_divergencia = False
     for r in regiones:
         if not r['hay_solape']:
             if r.get('cero_txt'):
                 ap(f"y(t) = {r['cero_txt']} = 0   si   {r['cond_txt']}")
             else:
                 ap(f"y(t) = 0   si   {r['cond_txt']}")
+            continue
+        if r.get('diverge'):
+            hay_divergencia = True
+            for g in r['integrales']:
+                if g.get('cero'):
+                    ap(f"y(t) = ∫[{g['low_txt']} → {g['high_txt']}] (0)·({g['h_shift_txt']}) dτ = 0")
+                    continue
+                ap(f"y(t) = ∫[{g['low_txt']} → {g['high_txt']}] ({g['x_tau_txt']})·({g['h_shift_txt']}) dτ")
+                ap(f"     = ∫[{g['low_txt']} → {g['high_txt']}] {g['integrando_txt']} dτ")
+                ap(f"     = {g['valor_txt']}   ← NO converge")
+            ap(f"⇒ y(t) = no converge   si   {r['cond_txt']}")
+            ap('')
             continue
         for g in r['integrales']:
             if g.get('cero'):
@@ -609,6 +644,8 @@ def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones):
             ap(f"     = ({g['Fsup_txt']}) − ({g['Finf_txt']}) = {g['valor_txt']}")
         ap(f"⇒ y(t) = {r['resultado_txt']}   si   {r['cond_txt']}")
         ap('')
+    if hay_divergencia:
+        ap('⚠ La integral de convolución no converge: revisa los tramos (hay una cola infinita donde el integrando no decae a 0).')
     ap('y(t) = { ' + ' ;  '.join(
         f"{r['resultado_txt']}  si  {r['cond_txt']}" for r in regiones) + ' }')
     return '\n'.join(L)
@@ -620,6 +657,80 @@ def _num_to_sym(v):
         return sp.nsimplify(v, rational=True)
     except Exception:
         return sp.Float(v)
+
+
+# ------------------------------------------------- convergencia (BUG-15)
+# El método de la guía (Lección 3) evalúa ∫ x(τ)·h(t−τ) dτ con límites que
+# pueden ser infinitos; si la cola no decae, la integral NO converge y no
+# debe presentarse un valor (ni ∞) como si fuera la respuesta por tramos.
+def _es_divergente(val):
+    """True si el valor de la integral salió ±oo / zoo / nan / Acotado
+    (AccumBounds de integrales oscilatorias): no converge."""
+    if val is None:
+        return True
+    if isinstance(val, sp.AccumBounds):
+        return True
+    try:
+        if val.has(sp.oo) or val.has(-sp.oo) or val.has(sp.zoo) or val.has(sp.nan):
+            return True
+        if val.is_number:
+            return not bool(val.is_finite)
+    except Exception:
+        return True
+    return False
+
+
+def _valor_divergente_txt(val):
+    """Texto plano del valor de una integral que no converge ('∞', '-∞', ...)."""
+    if val == sp.oo:
+        return '+∞'
+    if val == -sp.oo:
+        return '-∞'
+    return 'no converge'
+
+
+def _valor_divergente_latex(val):
+    if val == sp.oo:
+        return r'+\infty'
+    if val == -sp.oo:
+        return r'-\infty'
+    return r'\text{no converge}'
+
+
+def _causa_divergencia(low_sym, high_sym, integrando):
+    """Explica por qué no converge la integral con esos límites: qué lado
+    infinito falla y a qué tiende el integrando en esa cola."""
+    lados = []
+    if high_sym == sp.oo:
+        lados.append(('+∞', sp.S.Infinity))
+    if low_sym == -sp.oo:
+        lados.append(('−∞', sp.S.NegativeInfinity))
+    frases = []
+    for lado, dir_lim in lados:
+        try:
+            lim = sp.limit(integrando, tau, dir_lim)
+        except Exception:
+            lim = None
+        if lim is None or (not lim.is_number and not isinstance(lim, sp.AccumBounds)):
+            frases.append(f'el área acumulada hacia τ→{lado} no es finita')
+        elif lim == 0:
+            frases.append(f'el integrando tiende a 0 hacia τ→{lado} pero el área acumulada no es finita')
+        elif isinstance(lim, sp.AccumBounds):
+            frases.append(f'el integrando oscila sin definirse cuando τ→{lado}')
+        else:
+            frases.append(f'el integrando tiende a {_txt_expr(lim)} (≠ 0) cuando τ→{lado}')
+    return '; '.join(frases) if frases else 'el intervalo de integración es infinito y el área no es finita'
+
+
+def _aviso_divergencia(low_sym, high_sym, integrando):
+    """Aviso completo (texto plano) para una región cuya integral diverge:
+    causa + exigencia del método (Lección 3) + pista sobre los tramos."""
+    causa = _causa_divergencia(low_sym, high_sym, integrando)
+    return ('La integral de convolución NO converge con estos tramos: ' + causa + '. '
+            'El método de la guía exige que x(τ)·h(t−τ) se anule (o decaiga a 0) '
+            'en la cola infinita del intervalo de integración. Revisa los límites A/B '
+            'de los tramos: una señal como f(t)·u(t) se separa en el tramo '
+            '«desde 0 hasta ∞», no «desde −∞» (usa «Separar en tramos»).')
 
 
 def solve_convolution_from_segs(x_segs, h_segs):
@@ -678,6 +789,8 @@ def solve_convolution_from_segs(x_segs, h_segs):
         integrales = []
         total = sp.Integer(0)
         vistos_cero = set()
+        region_diverge = False
+        aviso_region = ''
         for o in ov:
             i, j = o['i'], o['j']
             xs, hs = x_segs[i], h_segs[j]
@@ -725,8 +838,23 @@ def solve_convolution_from_segs(x_segs, h_segs):
                 try:
                     val = sp.cancel(F.subs(tau, high_sym) - F.subs(tau, low_sym))
                 except Exception:
-                    val = sp.simplify(sp.integrate(integrando, (tau, low_sym, high_sym)))
-                total = sp.expand(total + val)
+                    try:
+                        val = sp.simplify(sp.integrate(integrando, (tau, low_sym, high_sym)))
+                    except Exception:
+                        val = sp.nan
+                # BUG-15: con límite infinito la integral puede NO converger
+                # (cola que no decae a 0): se detecta y se reporta en vez de
+                # aceptar ±∞ como si fuera la respuesta.
+                diverge_parte = _es_divergente(val)
+                if diverge_parte:
+                    region_diverge = True
+                    aviso_region = _aviso_divergencia(low_sym, high_sym, integrando)
+                    valor_latex_g = _valor_divergente_latex(val)
+                    valor_txt_g = _valor_divergente_txt(val)
+                else:
+                    valor_latex_g = latex(sp.simplify(val))
+                    valor_txt_g = _txt_expr(val)
+                    total = sp.expand(total + val)
                 # Procedimiento por intervalo (como en clase): regla, primitiva,
                 # evaluar arriba y abajo por separado y restar (TFC).
                 try:
@@ -757,9 +885,29 @@ def solve_convolution_from_segs(x_segs, h_segs):
                     'integrando_str': str(integrando),
                     'primitiva_txt': _txt_expr(F),
                     'Fsup_txt': _txt_expr(F_upper), 'Finf_txt': _txt_expr(F_lower),
-                    'valor_txt': _txt_expr(val),
-                    'valor_latex': latex(sp.simplify(val)),
+                    'valor_txt': valor_txt_g,
+                    'valor_latex': valor_latex_g,
                 })
+        if region_diverge:
+            # BUG-15: la región no tiene respuesta numérica. Se marca
+            # 'diverge' para que UI/texto digan «no converge» y la gráfica
+            # deje un hueco (nan) en vez de dibujar ∞.
+            solapes_txt = '; '.join(
+                [rf"\(\tau\in[{latex(o['low_sym'])},{latex(o['high_sym'])}]\) (par \(x_{{{o['i']+1}}} \cdot h_{{{o['j']+1}}}\))"
+                 for o in ov])
+            regiones.append({
+                'k': k, 't_lo': lo, 't_hi': hi, 'cond_latex': cond,
+                'cond_txt': _cond_txt(lo, hi, ultimo),
+                'hay_solape': True,
+                'explicacion': (r'Solape en \(\tau\): ' + solapes_txt + '.'),
+                'integrales': integrales,
+                'diverge': True,
+                'aviso_txt': aviso_region,
+                'resultado': sp.nan,
+                'resultado_latex': r'\text{no converge}',
+                'resultado_txt': 'no converge',
+            })
+            continue
         total = sp.simplify(sp.expand(total))
         solapes_txt = '; '.join(
             [rf"\(\tau\in[{latex(o['low_sym'])},{latex(o['high_sym'])}]\) (par \(x_{{{o['i']+1}}} \cdot h_{{{o['j']+1}}}\))"
@@ -774,12 +922,14 @@ def solve_convolution_from_segs(x_segs, h_segs):
             'resultado_latex': latex(total),
             'resultado_txt': _txt_expr(total),
         })
-    # soporte de y
-    y_ini = min(crit) if crit else 0
-    # forma con escalones u
+    # soporte de y: solo tiene sentido si hay críticos (con regiones que
+    # divergen, o sin críticos, no se afirma dónde «inicia» y(t))
+    y_ini = min(crit) if crit else None
+    # forma con escalones u (se omite si alguna región no converge: escribir
+    # (∞)·u(t) o nan·u(t) no es una respuesta)
     esc_parts = []
     for r in regiones:
-        if r['hay_solape'] and r['resultado'] != 0:
+        if r['hay_solape'] and r['resultado'] != 0 and not r.get('diverge'):
             lo, hi = r['t_lo'], r['t_hi']
             if lo == float('-inf') and hi == float('inf'):
                 esc_parts.append(f"({latex(r['resultado'])})")
@@ -789,7 +939,9 @@ def solve_convolution_from_segs(x_segs, h_segs):
                 esc_parts.append(f"({latex(r['resultado'])})\\,[u({fmt_u_shift(lo)})]")
             else:
                 esc_parts.append(f"({latex(r['resultado'])})\\,[u({fmt_u_shift(lo)})-u({fmt_u_shift(hi)})]")
-    if not esc_parts:
+    if any(r.get('diverge') for r in regiones):
+        y_esc = ''
+    elif not esc_parts:
         y_esc = '0'
     else:
         y_esc = ' + '.join(esc_parts)
@@ -797,11 +949,12 @@ def solve_convolution_from_segs(x_segs, h_segs):
         [f"{r['resultado_latex']}, & {r['cond_latex']}" for r in regiones]) + r' \end{cases}'
     return {
         'paso1': p1, 'paso2': p2, 'criticos': crit,
-        't_inicio': y_ini if crit else 0,
+        't_inicio': y_ini,
         'regiones': regiones,
         'y_tramos_latex': tramos,
         'y_escalones_latex': y_esc,
         'procedimiento_txt': _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones),
+        'avisos': [r['aviso_txt'] for r in regiones if r.get('diverge')],
         'x_segs': [{'a': str(s['a']), 'b': str(s['b']), 'expr': str(s['expr'])} for s in x_segs],
         'h_segs': [{'a': str(s['a']), 'b': str(s['b']), 'expr': str(s['expr'])} for s in h_segs],
     }
@@ -854,6 +1007,11 @@ def eval_piecewise(segs, grid):
 def y_function(regiones):
     fns = []
     for r in regiones:
+        if r.get('diverge'):
+            # BUG-15: la integral no converge ahí -> hueco (nan) en la gráfica,
+            # sin nan_to_num (convertiría el hueco en 0)
+            fns.append((r['t_lo'], r['t_hi'], None))
+            continue
         try:
             f = sp.lambdify(t, r['resultado'], modules=['numpy'])
         except Exception:
@@ -869,6 +1027,10 @@ def y_function(regiones):
                 m = (t0 >= lo - 1e-12)
             # incluir borde final del último intervalo
             try:
+                if fn is None:
+                    out[m] = np.nan
+                    covered |= m
+                    continue
                 v = fn(t0[m])
                 v = np.asarray(v, dtype=float)
                 if v.shape == ():
@@ -1128,6 +1290,9 @@ def api_convolve():
         hv = eval_piecewise(h_segs, g)
         yf = y_function(sol['regiones'])
         yv = yf(g)
+        # BUG-15: nan/±oo (regiones que no convergen) -> null para que el JSON
+        # sea válido y Plotly dibuje un hueco (ver BUG-12)
+        yv = [None if not math.isfinite(v) else v for v in np.asarray(yv, dtype=float).tolist()]
         # convertir regiones (sympy -> str)
         regs = []
         for r in sol['regiones']:
@@ -1142,6 +1307,8 @@ def api_convolve():
                 'explicacion': r['explicacion'],
                 'cero_latex': r.get('cero_latex', ''),
                 'integrales': r['integrales'],
+                'diverge': bool(r.get('diverge', False)),
+                'aviso_txt': r.get('aviso_txt', ''),
                 'resultado_latex': r['resultado_latex'],
                 'resultado_txt': r['resultado_txt'],
             })
@@ -1150,8 +1317,9 @@ def api_convolve():
                         'regiones': regs, 'y_tramos_latex': sol['y_tramos_latex'],
                         'y_escalones_latex': sol['y_escalones_latex'],
                         'procedimiento_txt': sol['procedimiento_txt'],
+                        'avisos': sol.get('avisos', []),
                         'criterio': criterio_fija(x_segs, h_segs),
-                        'grid': g.tolist(), 'x_vals': xv.tolist(), 'h_vals': hv.tolist(), 'y_vals': yv.tolist()})
+                        'grid': g.tolist(), 'x_vals': xv.tolist(), 'h_vals': hv.tolist(), 'y_vals': yv})
     except Exception as e:
         from werkzeug.exceptions import RequestEntityTooLarge
         if isinstance(e, RequestEntityTooLarge):

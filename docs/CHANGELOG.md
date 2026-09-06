@@ -3,6 +3,39 @@
 Registro de todo lo trabajado sobre este proyecto. Las etiquetas entre paréntesis
 (`BUG-x`, `OPT-x`, `DESIGN-x`) son las que se usan en los comentarios del código.
 
+## 2026-09-06 — Convergencia: «no converge» en vez de ∞ disfrazado (BUG-15)
+
+- **Detección de integrales que no convergen.** Con tramos de soporte infinito
+  el límite de integración puede ser infinito y la integral diverger: p. ej.
+  x(t)=5e^(−3t) en (−∞,∞) con h(t)=u(t) da ∫[−∞→t] 5e^(−3τ)dτ = ∞. Antes el
+  motor presentaba «y(t)=∞ para todo t» como si fuera una respuesta por
+  tramos; ahora cada región evalúa sus límites infinitos y, si el valor sale
+  ±∞ / zoo / nan / Acotado (oscilatorias), se marca `diverge`: la región
+  responde **no converge**, la gráfica y(t) deja un hueco (null en el JSON, que
+  además evita serializar NaN/Infinity inválidos — misma familia que BUG-12) y
+  la lectura de área del solape muestra «no converge» en vez de un recorte
+  numérico engañoso.
+- **Aviso con la causa y la corrección del tramo.** Bajo el criterio de la
+  fija aparece una tarjeta de advertencia: qué lado (τ→−∞ o τ→+∞) falla, a qué
+  tiende el integrando en esa cola, la exigencia del método (Lección 3: el
+  producto debe anularse/decaer en la cola infinita) y la pista de tramos:
+  una señal f(t)·u(t) se separa en «desde 0 hasta ∞», no «desde −∞» (botón
+  «Separar en tramos»). También en el texto copiable del procedimiento.
+- **Paso 3 sin puntos críticos inventados.** Si no hay sumas de bordes finitos
+  (todos los tramos tienen soporte infinito) ya no se muestra `t_c ∈ {0}` con
+  un 0 falso: se indica «sin puntos críticos: un único intervalo de t» y
+  `t_inicio` es null (antes 0). El texto copiable refleja lo mismo.
+- **Tramo que cubre toda la recta bien escrito.** La vista previa y los pasos
+  1–2 mostraban `{5e^{−3t}, t∈ℝ; 0, e.o.c.}` (contradictorio); ahora un tramo
+  en toda la recta se escribe `f(t) = expr, t ∈ ℝ` (y en texto plano, solo la
+  fórmula).
+- **Verificado:** entrada del reporte (x en ℝ × u(t)) → aviso + «no converge»;
+  taller Ej. 1 correcto (5e^(−3t)u(t) × u(t)) → críticos {0}, y=0 para t<0 y
+  5/3(1−e^(−3t)) para t≥0 (Lección 3, ej. 1); rampa×pulso → resultados y
+  críticos intactos (regresión); e^(−t)u(t) × e^(t)u(−t) → solape infinito que
+  SÍ converge, valores ½e^(±t) sin falsos positivos; sen(t) en ℝ × u(t) →
+  detectada como no convergente (oscila).
+
 ## 2026-09-05 — Rediseño editorial, ejemplo único y salida para el cuaderno
 
 - **Rediseño completo de la interfaz** (se retira el look «panel oscuro + cian»):
