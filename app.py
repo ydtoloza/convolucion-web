@@ -1239,12 +1239,12 @@ def api_descomponer():
             ex = parse_expr(s['expr'], var)
             aa = parse_bound(s['a'])
             bb = parse_bound(s['b'])
-        out.append({
-            'a': s['a'], 'b': s['b'], 'expr': s['expr'],
-            'latex': latex(ex),
-            'tramo_latex': tramo_cases_latex(
-                rf"x({latex(var)})", ex, aa, bb, var),
-        })
+            out.append({
+                'a': s['a'], 'b': s['b'], 'expr': s['expr'],
+                'latex': latex(ex),
+                'tramo_latex': tramo_cases_latex(
+                    rf"x({latex(var)})", ex, aa, bb, var),
+            })
         return jsonify({'ok': True, 'segs': out, 'n': len(out)})
     except Exception as e:
         if not isinstance(e, ValueError):

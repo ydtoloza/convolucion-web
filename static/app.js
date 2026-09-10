@@ -4,6 +4,9 @@ let lastRegiones = [], lastCriticos = [];
 let lastProcTxt = '';
 let lastPlotData = null, lastSolapeData = null;
 let focusedExpr = null;
+// La ecuación completa y sus filas deben representar la misma versión. Sin
+// esta marca, editar la ecuación después de separarla resolvía filas antiguas.
+const splitState = { x: { source: null, stale: false }, h: { source: null, stale: false } };
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
@@ -227,6 +230,7 @@ async function descomponerSingle(cual) {
     if (!j.ok) throw new Error(j.error);
     $('#' + rowsId).innerHTML = '';
     j.segs.forEach(s => tramoRow($('#' + rowsId), s));
+    splitState[cual] = { source: expr, stale: false };
     fitSliderToSegs(j.segs);
     msg.textContent = `${j.n} tramo${j.n === 1 ? '' : 's'} separado${j.n === 1 ? '' : 's'}: revísalos abajo y pulsa Resolver.`;
   } catch (e) {
@@ -256,6 +260,8 @@ function aplicarEjemplo() {
   // limpiar también las cajas de "señal completa" para no mezclar entradas viejas
   $('#xSingle').value = ''; $('#hSingle').value = '';
   $('#xSingleMsg').textContent = ''; $('#hSingleMsg').textContent = '';
+  splitState.x = { source: null, stale: false };
+  splitState.h = { source: null, stale: false };
   $('#xRows').innerHTML = ''; $('#hRows').innerHTML = '';
   EJEMPLO.x.forEach(s => tramoRow($('#xRows'), s));
   EJEMPLO.h.forEach(s => tramoRow($('#hRows'), s));
@@ -291,6 +297,9 @@ function intercambiarSenales() {
   const xs = $('#xSingle').value;
   $('#xSingle').value = $('#hSingle').value;
   $('#hSingle').value = xs;
+  const xState = splitState.x;
+  splitState.x = splitState.h;
+  splitState.h = xState;
   fitSliderToSegs([...h, ...x]);
   resolver();
 }
@@ -310,6 +319,10 @@ async function resolver() {
   try {
     const x = readSegs('xRows'), h = readSegs('hRows');
     if (!x.length || !h.length) throw new Error('Agrega al menos un tramo en x(t) y uno en h(t).');
+    const stale = ['x', 'h'].filter(cual => splitState[cual].stale);
+    if (stale.length) {
+      throw new Error(`La ecuación de ${stale.map(cual => `${cual}(t)`).join(' y ')} cambió después de separar sus tramos. Pulsa “Separar en tramos” antes de resolver.`);
+    }
     lastX = x; lastH = h;
     const r = await fetch('/api/convolve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, h }) });
     const j = await r.json();
@@ -595,10 +608,21 @@ $('#xToTramos').onclick = () => descomponerSingle('x');
 $('#hToTramos').onclick = () => descomponerSingle('h');
 $('#xSingle').addEventListener('keydown', (e) => { if (e.key === 'Enter') descomponerSingle('x'); });
 $('#hSingle').addEventListener('keydown', (e) => { if (e.key === 'Enter') descomponerSingle('h'); });
-// Al seguir escribiendo se borra el mensaje anterior (evita confundir un
-// error viejo, ej. un 'e^()' a medio escribir, con el contenido actual).
-$('#xSingle').addEventListener('input', () => { $('#xSingleMsg').textContent = ''; });
-$('#hSingle').addEventListener('input', () => { $('#hSingleMsg').textContent = ''; });
+// Si cambia una ecuación ya separada, sus filas dejan de ser confiables hasta
+// regenerarlas. Así nunca se resuelve una versión anterior de la señal.
+function markSplitStale(cual) {
+  const inp = cual === 'x' ? $('#xSingle') : $('#hSingle');
+  const msg = cual === 'x' ? $('#xSingleMsg') : $('#hSingleMsg');
+  const state = splitState[cual];
+  if (state.source !== null && inp.value !== state.source) {
+    state.stale = true;
+    msg.textContent = 'La ecuación cambió: vuelve a pulsar Separar en tramos antes de resolver.';
+  } else if (!state.stale) {
+    msg.textContent = '';
+  }
+}
+$('#xSingle').addEventListener('input', () => markSplitStale('x'));
+$('#hSingle').addEventListener('input', () => markSplitStale('h'));
 $('#resolver').onclick = resolver;
 $('#resolverInt').onclick = resolverInt;
 // Slider en vivo: el número se actualiza al instante y la gráfica sigue al

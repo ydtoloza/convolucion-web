@@ -98,7 +98,7 @@ if(t==='dark'||(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)'
             <button data-ins="oo">∞</button>
             <button data-ins="-oo">−∞</button>
           </div>
-          <p class="hint">Escriba con soltura: <code>5t</code>, <code>2(t+1)</code>, <code>e^(-3t)</code>, <code>5e-3t</code>, <code>t^2</code>, <code>sen(t)</code>. Cada tramo se previsualiza al escribirlo.</p>
+          <p class="hint">Escriba con soltura: <code>5t</code>, <code>2(t+1)</code>, <code>e^(-3t)</code>, <code>5e-3t</code>, <code>t^2</code>, <code>sen(t)</code>. En productos con escalones use <code>*</code> explícito, por ejemplo <code>t*u(t+10)*u(-t)-t*u(t-10)*u(-t+20)</code>. Cada tramo se previsualiza al escribirlo.</p>
         </div>
 
         <div class="sig-block">
@@ -107,7 +107,7 @@ if(t==='dark'||(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)'
             <button id="addX" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Añadir tramo</button>
           </div>
           <div class="single-expr">
-            <input id="xSingle" placeholder="señal completa, ej: 3*exp(-2*t)*u(t)" spellcheck="false" autocomplete="off" aria-label="Señal x(t) completa">
+            <input id="xSingle" placeholder="señal completa, ej: t*u(t+10)*u(-t)" spellcheck="false" autocomplete="off" aria-label="Señal x(t) completa">
             <button id="xToTramos" class="ghost" title="Separar en tramos a partir del escalón"><svg class="icon"><use href="#i-split"/></svg>Separar en tramos</button>
           </div>
           <div class="hint msg" id="xSingleMsg" aria-live="polite"></div>
