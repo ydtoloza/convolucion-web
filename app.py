@@ -218,6 +218,16 @@ def tramo_cases_latex(nombre, ex, a, b, var):
             rf"0, & \text{{e.o.c.}} \end{{cases}}")
 
 
+def signal_cases_latex(nombre, segs, var):
+    """Presenta todos los segmentos como una única señal por tramos."""
+    if len(segs) == 1 and segs[0]['a'] == -sp.oo and segs[0]['b'] == sp.oo:
+        return rf"{nombre} = {latex(segs[0]['expr'])}, \quad {latex(var)} \in \mathbb{{R}}"
+    partes = [rf"{latex(s['expr'])}, & {cond_var_latex(var, s['a'], s['b'])}"
+              for s in segs]
+    partes.append(r"0, & \text{e.o.c.}")
+    return rf"{nombre} = \begin{{cases}} " + r" \\ ".join(partes) + r" \end{cases}"
+
+
 # ------------------------------------------------- texto plano (copiable)
 def _txt_expr(e):
     """Expresión sympy -> texto plano con símbolos unicode, lista para pegar
@@ -563,6 +573,41 @@ def critical_points(x_segs, h_segs):
     return sorted(c for c in cand if math.isfinite(c))
 
 
+def critical_points_details(x_segs, h_segs):
+    """Explica cada punto crítico como suma de un borde de x y uno de h."""
+    origenes = {}
+    for xs in x_segs:
+        for hs in h_segs:
+            for s1, n1 in [(xs['a'], xs['a_num']), (xs['b'], xs['b_num'])]:
+                for s2, n2 in [(hs['a'], hs['a_num']), (hs['b'], hs['b_num'])]:
+                    if not math.isfinite(n1) or not math.isfinite(n2):
+                        continue
+                    try:
+                        valor = float((s1 + s2).evalf())
+                    except Exception:
+                        continue
+                    if not math.isfinite(valor):
+                        continue
+                    if abs(valor) < 1e-9:
+                        valor = 0.0
+                    clave = round(valor, 10)
+                    origenes.setdefault(clave, []).append((s1, s2))
+    if not origenes:
+        return '', ''
+    lineas_latex = []
+    lineas_txt = []
+    for valor in sorted(origenes):
+        pares = origenes[valor]
+        sumas_latex = [rf"({latex(a)})+({latex(b)})" for a, b in pares]
+        sumas_txt = [f"({_txt_expr(a)})+({_txt_expr(b)})" for a, b in pares]
+        punto_latex = latex(_num_to_sym(valor))
+        punto_txt = _txt_num(valor)
+        lineas_latex.append(rf"{punto_latex} &= " + r" = ".join(sumas_latex))
+        lineas_txt.append(f"{punto_txt} = " + ' = '.join(sumas_txt))
+    return (r"\begin{aligned}" + r" \\ ".join(lineas_latex) + r"\end{aligned}",
+            '; '.join(lineas_txt))
+
+
 def overlaps_for_t(x_segs, h_segs, tmid):
     """Para un t numérico, devuelve lista de solapes (i,j,low_num,high_num,low_sym,high_sym)."""
     ov = []
@@ -591,7 +636,21 @@ def overlaps_for_t(x_segs, h_segs, tmid):
     return ov
 
 
-def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones):
+def overlap_details(o, xs, hs):
+    """Deriva los límites del solape como máximo de inferiores y mínimo de superiores."""
+    low_x, low_h = xs['a'], t - hs['b']
+    high_x, high_h = xs['b'], t - hs['a']
+    lo, hi = o['low_sym'], o['high_sym']
+    tex = (rf"\tau \in [\max\left({latex(low_x)}, {latex(low_h)}\right), "
+           rf"\min\left({latex(high_x)}, {latex(high_h)}\right)] "
+           rf"= [{latex(lo)}, {latex(hi)}]")
+    txt = (f"τ ∈ [max({_txt_expr(low_x)}, {_txt_expr(low_h)}), "
+           f"min({_txt_expr(high_x)}, {_txt_expr(high_h)})] "
+           f"= [{_txt_expr(lo)}, {_txt_expr(hi)}]")
+    return tex, txt
+
+
+def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, criticos_detalle_txt, regiones):
     """Procedimiento en texto plano (unicode), listo para copiar al cuaderno:
     solo matemática, una línea por paso, sin explicaciones."""
     L = []
@@ -610,6 +669,8 @@ def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones):
     # de t no se divide).
     if crit:
         ap('t_c = {' + ', '.join(_txt_num(c) for c in crit) + '}')
+        if criticos_detalle_txt:
+            ap('Cálculo de t_c: ' + criticos_detalle_txt)
         ap('y(t) inicia en t = ' + _txt_num(min(crit)))
     else:
         ap('No hay puntos críticos (no hay bordes finitos que sumar): un único intervalo de t')
@@ -624,6 +685,8 @@ def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones):
             continue
         if r.get('diverge'):
             hay_divergencia = True
+            for solape in r.get('solapes_txt', []):
+                ap('Solape: ' + solape)
             for g in r['integrales']:
                 if g.get('cero'):
                     ap(f"y(t) = ∫[{g['low_txt']} → {g['high_txt']}] (0)·({g['h_shift_txt']}) dτ = 0")
@@ -634,6 +697,8 @@ def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones):
             ap(f"⇒ y(t) = no converge   si   {r['cond_txt']}")
             ap('')
             continue
+        for solape in r.get('solapes_txt', []):
+            ap('Solape: ' + solape)
         for g in r['integrales']:
             if g.get('cero'):
                 ap(f"y(t) = ∫[{g['low_txt']} → {g['high_txt']}] (0)·({g['h_shift_txt']}) dτ = 0")
@@ -737,6 +802,7 @@ def solve_convolution_from_segs(x_segs, h_segs):
     p1 = paso1_h(h_segs)
     p2 = paso2_x(x_segs)
     crit = critical_points(x_segs, h_segs)
+    criticos_detalle_latex, criticos_detalle_txt = critical_points_details(x_segs, h_segs)
     if len(crit) == 0:
         # caso totalmente infinito (raro): un solo intervalo
         bounds = [float('-inf'), float('inf')]
@@ -757,6 +823,9 @@ def solve_convolution_from_segs(x_segs, h_segs):
             if hi - lo < 1e-9:
                 continue
         ov = overlaps_for_t(x_segs, h_segs, tmid)
+        solapes_detalle = [overlap_details(o, x_segs[o['i']], h_segs[o['j']]) for o in ov]
+        solapes_latex = [detalle[0] for detalle in solapes_detalle]
+        solapes_txt = [detalle[1] for detalle in solapes_detalle]
         ultimo = (k == len(bounds) - 2)
         cond = intervalo_t_latex(lo, hi, primero=(k == 0), ultimo=ultimo)
         if not ov:
@@ -779,6 +848,7 @@ def solve_convolution_from_segs(x_segs, h_segs):
                 'cond_txt': _cond_txt(lo, hi, ultimo),
                 'hay_solape': False,
                 'explicacion': r'En este intervalo \(x(\tau)\) y \(h(t-\tau)\) no se solapan: el producto es \(0\) en todo \(\tau\).',
+                'solapes_latex': [], 'solapes_txt': [],
                 'cero_latex': cero_latex, 'cero_txt': cero_txt,
                 'integrales': [],
                 'resultado': sp.Integer(0),
@@ -892,14 +962,15 @@ def solve_convolution_from_segs(x_segs, h_segs):
             # BUG-15: la región no tiene respuesta numérica. Se marca
             # 'diverge' para que UI/texto digan «no converge» y la gráfica
             # deje un hueco (nan) en vez de dibujar ∞.
-            solapes_txt = '; '.join(
+            solapes_resumen = '; '.join(
                 [rf"\(\tau\in[{latex(o['low_sym'])},{latex(o['high_sym'])}]\) (par \(x_{{{o['i']+1}}} \cdot h_{{{o['j']+1}}}\))"
                  for o in ov])
             regiones.append({
                 'k': k, 't_lo': lo, 't_hi': hi, 'cond_latex': cond,
                 'cond_txt': _cond_txt(lo, hi, ultimo),
                 'hay_solape': True,
-                'explicacion': (r'Solape en \(\tau\): ' + solapes_txt + '.'),
+                'explicacion': (r'Solape en \(\tau\): ' + solapes_resumen + '.'),
+                'solapes_latex': solapes_latex, 'solapes_txt': solapes_txt,
                 'integrales': integrales,
                 'diverge': True,
                 'aviso_txt': aviso_region,
@@ -909,14 +980,15 @@ def solve_convolution_from_segs(x_segs, h_segs):
             })
             continue
         total = sp.simplify(sp.expand(total))
-        solapes_txt = '; '.join(
+        solapes_resumen = '; '.join(
             [rf"\(\tau\in[{latex(o['low_sym'])},{latex(o['high_sym'])}]\) (par \(x_{{{o['i']+1}}} \cdot h_{{{o['j']+1}}}\))"
              for o in ov])
         regiones.append({
             'k': k, 't_lo': lo, 't_hi': hi, 'cond_latex': cond,
             'cond_txt': _cond_txt(lo, hi, ultimo),
             'hay_solape': True,
-            'explicacion': (r'Solape en \(\tau\): ' + solapes_txt + '.'),
+            'explicacion': (r'Solape en \(\tau\): ' + solapes_resumen + '.'),
+            'solapes_latex': solapes_latex, 'solapes_txt': solapes_txt,
             'integrales': integrales,
             'resultado': total,
             'resultado_latex': latex(total),
@@ -949,12 +1021,16 @@ def solve_convolution_from_segs(x_segs, h_segs):
         [f"{r['resultado_latex']}, & {r['cond_latex']}" for r in regiones]) + r' \end{cases}'
     return {
         'paso1': p1, 'paso2': p2, 'criticos': crit,
+        'criticos_detalle_latex': criticos_detalle_latex,
         't_inicio': y_ini,
         'regiones': regiones,
         'y_tramos_latex': tramos,
         'y_escalones_latex': y_esc,
-        'procedimiento_txt': _procedimiento_txt(x_segs, h_segs, p1, p2, crit, regiones),
+        'procedimiento_txt': _procedimiento_txt(
+            x_segs, h_segs, p1, p2, crit, criticos_detalle_txt, regiones),
         'avisos': [r['aviso_txt'] for r in regiones if r.get('diverge')],
+        'x_tramos_latex': signal_cases_latex('x(t)', x_segs, t),
+        'h_tramos_latex': signal_cases_latex('h(t)', h_segs, t),
         'x_segs': [{'a': str(s['a']), 'b': str(s['b']), 'expr': str(s['expr'])} for s in x_segs],
         'h_segs': [{'a': str(s['a']), 'b': str(s['b']), 'expr': str(s['expr'])} for s in h_segs],
     }
@@ -1305,6 +1381,7 @@ def api_convolve():
                 'cond_txt': r['cond_txt'],
                 'hay_solape': r['hay_solape'],
                 'explicacion': r['explicacion'],
+                'solapes_latex': r.get('solapes_latex', []),
                 'cero_latex': r.get('cero_latex', ''),
                 'integrales': r['integrales'],
                 'diverge': bool(r.get('diverge', False)),
@@ -1313,9 +1390,12 @@ def api_convolve():
                 'resultado_txt': r['resultado_txt'],
             })
         return jsonify({'ok': True, 'paso1': sol['paso1'], 'paso2': sol['paso2'],
-                        'criticos': crit, 't_inicio': sol['t_inicio'],
+                        'criticos': crit, 'criticos_detalle_latex': sol['criticos_detalle_latex'],
+                        't_inicio': sol['t_inicio'],
                         'regiones': regs, 'y_tramos_latex': sol['y_tramos_latex'],
                         'y_escalones_latex': sol['y_escalones_latex'],
+                        'x_tramos_latex': sol['x_tramos_latex'],
+                        'h_tramos_latex': sol['h_tramos_latex'],
                         'procedimiento_txt': sol['procedimiento_txt'],
                         'avisos': sol.get('avisos', []),
                         'criterio': criterio_fija(x_segs, h_segs),

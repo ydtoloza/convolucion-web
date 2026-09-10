@@ -329,6 +329,11 @@ async function resolver() {
     if (!j.ok) throw new Error(j.error);
     $('#resultado').style.display = 'block';
     renderLatex($('#defConv'), 'y(t)=\\int_{-\\infty}^{\\infty}x(\\tau)\\,h(t-\\tau)\\,d\\tau', true);
+    $('#senalesTramos').innerHTML = `<div class="paso math">
+      <span class="hint">Señales por tramos</span>
+      <span class="m">\\[${j.x_tramos_latex}\\]</span>
+      <span class="m">\\[${j.h_tramos_latex}\\]</span>
+    </div>`;
     lastRegiones = j.regiones || [];
     lastCriticos = j.criticos || [];
     lastProcTxt = j.procedimiento_txt || '';
@@ -365,6 +370,8 @@ async function resolver() {
     $('#p3').innerHTML = c.length
       ? `<div class="paso math">
           <span class="m">\\(t_c \\in \\{${c.map(v => Number(v).toFixed(2)).join(',\\;')}\\}\\)</span>` +
+        (j.criticos_detalle_latex ? `<span class="hint">Cada punto crítico es un borde de x más un borde de h.</span>
+          <span class="m">\\[${j.criticos_detalle_latex}\\]</span>` : '') +
         (j.t_inicio != null ? `<span class="m">\\(t_{\\text{inicio}} = ${fmtT(j.t_inicio)}\\)</span>` : '') +
         `</div>`
       : `<div class="paso math">
@@ -378,11 +385,15 @@ async function resolver() {
     // integrando expandido → primitiva → evaluación), sin texto.
     $('#p4').innerHTML = j.regiones.map((rr) => {
       const head = `<div class="region-head"><span class="m">\\(${rr.cond_latex}\\)</span></div>`;
+      const solapes = (rr.solapes_latex || []).map(tex => `<span class="m">\\(${tex}\\)</span>`).join('');
+      const bloqueSolape = solapes
+        ? `<div class="paso math"><span class="hint">Límites del solape</span>${solapes}</div>`
+        : '';
       if (!rr.hay_solape) {
         const lineaCero = rr.cero_latex
           ? `<div class="paso math"><span class="m">\\(${rr.cero_latex}\\)</span></div>`
           : '';
-        return `<div class="region cero">${head}${lineaCero}
+        return `<div class="region cero">${head}<div class="hint">${esc(rr.explicacion)}</div>${lineaCero}
           <div class="res-line"><span class="m">\\(y(t)=0\\)</span></div></div>`;
       }
       const ints = rr.integrales.map((g) => {
@@ -397,8 +408,11 @@ async function resolver() {
         return `<div class="paso math">
           <span class="m">\\(${completaTex}\\)</span>
           <span class="m">\\(= ${expandidaTex}\\)</span>
+          <span class="hint">${esc(g.regla_integrando || '')}</span>
           <span class="m">\\(F(\\tau)=${g.primitiva_latex}\\)</span>
-          <span class="m">\\(${g.eval_latex}\\)</span>
+          <span class="m">\\(F(${g.high_latex})=${g.Fsup_latex}\\)</span>
+          <span class="m">\\(F(${g.low_latex})=${g.Finf_latex}\\)</span>
+          <span class="m">\\(${g.resta_latex}\\)</span>
         </div>`;
       }).join('');
       // BUG-15: región con integral divergente -> «no converge» + causa,
@@ -407,7 +421,7 @@ async function resolver() {
         ? `<div class="res-line"><span class="m">\\(y(t)=\\text{no converge}\\)</span></div>
            <div class="hint">${esc(rr.aviso_txt || '')}</div>`
         : `<div class="res-line"><span class="m">\\(y(t)=${rr.resultado_latex}\\)</span></div>`;
-      return `<div class="region">${head}${ints}${resLine}</div>`;
+      return `<div class="region">${head}${bloqueSolape}${ints}${resLine}</div>`;
     }).join('');
     $('#p5').innerHTML =
       `<div class="paso math"><span class="hint">por tramos</span><span class="m">\\[${j.y_tramos_latex}\\]</span></div>` +
