@@ -107,8 +107,7 @@ if(t==='dark'||(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)'
             <button id="addX" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Añadir tramo</button>
           </div>
           <div class="single-expr">
-            <input id="xSingle" placeholder="señal completa, ej: t*u(t+10)*u(-t)" spellcheck="false" autocomplete="off" aria-label="Señal x(t) completa">
-            <button id="xToTramos" class="ghost" title="Separar en tramos a partir del escalón"><svg class="icon"><use href="#i-split"/></svg>Separar en tramos</button>
+            <input id="xSingle" placeholder="señal completa, se separa automáticamente" spellcheck="false" autocomplete="off" aria-label="Señal x(t) completa">
           </div>
           <div class="hint msg" id="xSingleMsg" aria-live="polite"></div>
           <div id="xRows"></div>
@@ -119,8 +118,7 @@ if(t==='dark'||(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)'
             <button id="addH" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Añadir tramo</button>
           </div>
           <div class="single-expr">
-            <input id="hSingle" placeholder="señal completa, ej: u(t)" spellcheck="false" autocomplete="off" aria-label="Señal h(t) completa">
-            <button id="hToTramos" class="ghost" title="Separar en tramos a partir del escalón"><svg class="icon"><use href="#i-split"/></svg>Separar en tramos</button>
+            <input id="hSingle" placeholder="señal completa, se separa automáticamente" spellcheck="false" autocomplete="off" aria-label="Señal h(t) completa">
           </div>
           <div class="hint msg" id="hSingleMsg" aria-live="polite"></div>
           <div id="hRows"></div>

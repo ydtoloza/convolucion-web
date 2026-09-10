@@ -4,9 +4,10 @@ let lastRegiones = [], lastCriticos = [];
 let lastProcTxt = '';
 let lastPlotData = null, lastSolapeData = null;
 let focusedExpr = null;
-// La ecuación completa y sus filas deben representar la misma versión. Sin
-// esta marca, editar la ecuación después de separarla resolvía filas antiguas.
+// La ecuación completa y sus filas deben representar la misma versión. Al
+// escribir se regeneran las filas; al editarlas se pasa a modo manual.
 const splitState = { x: { source: null, stale: false }, h: { source: null, stale: false } };
+const splitRequestVersion = { x: 0, h: 0 };
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
@@ -121,6 +122,7 @@ function bindPalette(id) {
 let tramoId = 0;
 function tramoRow(container, seg) {
   const id = ++tramoId;
+  const cual = container.id === 'xRows' ? 'x' : 'h';
   const d = document.createElement('div');
   d.className = 'tramo'; d.dataset.id = id;
   // BUG-6: los valores van entre comillas de atributo -> escapar siempre
@@ -136,10 +138,13 @@ function tramoRow(container, seg) {
       <button class="del" type="button" title="Quitar tramo" aria-label="Quitar tramo"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
     </div>
     <div class="preview"><span class="hint">vista previa…</span></div>`;
-  d.querySelector('.del').onclick = () => d.remove();
+  d.querySelector('.del').onclick = () => { usarTramosManuales(cual); d.remove(); };
   container.appendChild(d);
   const update = debounce(() => previewTramo(d), 350);
-  d.querySelectorAll('input').forEach(i => i.addEventListener('input', update));
+  d.querySelectorAll('input').forEach(i => i.addEventListener('input', () => {
+    usarTramosManuales(cual);
+    update();
+  }));
   previewTramo(d);
 }
 function readSegs(id) {
@@ -215,28 +220,41 @@ function bindCopyButton(btn, getText) {
 
 // ---------- presets + plantillas ----------
 // Señal completa con escalón (ej. 3*exp(-2*t)*u(t)) -> tramos automáticos.
-// El servidor parte la recta en los ceros de cada u(·) y devuelve la fórmula
-// de cada región; aquí solo se cargan como filas para el flujo normal.
+// La respuesta se descarta si llegó tarde, para no reemplazar una versión más
+// reciente mientras el estudiante sigue escribiendo.
 async function descomponerSingle(cual) {
   const inp = cual === 'x' ? $('#xSingle') : $('#hSingle');
   const msg = cual === 'x' ? $('#xSingleMsg') : $('#hSingleMsg');
   const rowsId = cual === 'x' ? 'xRows' : 'hRows';
   const expr = inp.value;
-  if (!expr.trim()) { msg.textContent = 'Escribe primero la señal, ej: 3*exp(-2*t)*u(t)'; return; }
-  msg.textContent = 'Separando en tramos…';
+  const version = ++splitRequestVersion[cual];
+  if (!expr.trim()) {
+    splitState[cual] = { source: null, stale: false };
+    msg.textContent = '';
+    return;
+  }
+  splitState[cual] = { source: expr, stale: true };
+  msg.textContent = 'Actualizando tramos…';
   try {
     const r = await fetch('/api/descomponer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expr, var: 't' }) });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
+    if (version !== splitRequestVersion[cual] || inp.value !== expr) return;
     $('#' + rowsId).innerHTML = '';
     j.segs.forEach(s => tramoRow($('#' + rowsId), s));
     splitState[cual] = { source: expr, stale: false };
     fitSliderToSegs(j.segs);
-    msg.textContent = `${j.n} tramo${j.n === 1 ? '' : 's'} separado${j.n === 1 ? '' : 's'}: revísalos abajo y pulsa Resolver.`;
+    msg.textContent = `${j.n} tramo${j.n === 1 ? '' : 's'} actualizado${j.n === 1 ? '' : 's'} automáticamente.`;
   } catch (e) {
-    msg.textContent = friendlyError(e.message || e);
+    if (version !== splitRequestVersion[cual] || inp.value !== expr) return;
+    splitState[cual] = { source: expr, stale: true };
+    msg.textContent = 'La ecuación aún no es válida; corrígela para actualizar los tramos.';
   }
 }
+const sincronizarSingle = {
+  x: debounce(() => descomponerSingle('x'), 350),
+  h: debounce(() => descomponerSingle('h'), 350)
+};
 // ---------- ejemplo de trabajo (único) ----------
 // El servidor expone un solo ejemplo (el caso más completo del curso); se
 // carga al abrir la página y se puede restablecer con el botón de la tarjeta.
@@ -260,6 +278,7 @@ function aplicarEjemplo() {
   // limpiar también las cajas de "señal completa" para no mezclar entradas viejas
   $('#xSingle').value = ''; $('#hSingle').value = '';
   $('#xSingleMsg').textContent = ''; $('#hSingleMsg').textContent = '';
+  splitRequestVersion.x += 1; splitRequestVersion.h += 1;
   splitState.x = { source: null, stale: false };
   splitState.h = { source: null, stale: false };
   $('#xRows').innerHTML = ''; $('#hRows').innerHTML = '';
@@ -297,6 +316,7 @@ function intercambiarSenales() {
   const xs = $('#xSingle').value;
   $('#xSingle').value = $('#hSingle').value;
   $('#hSingle').value = xs;
+  splitRequestVersion.x += 1; splitRequestVersion.h += 1;
   const xState = splitState.x;
   splitState.x = splitState.h;
   splitState.h = xState;
@@ -321,7 +341,7 @@ async function resolver() {
     if (!x.length || !h.length) throw new Error('Agrega al menos un tramo en x(t) y uno en h(t).');
     const stale = ['x', 'h'].filter(cual => splitState[cual].stale);
     if (stale.length) {
-      throw new Error(`La ecuación de ${stale.map(cual => `${cual}(t)`).join(' y ')} cambió después de separar sus tramos. Pulsa “Separar en tramos” antes de resolver.`);
+      throw new Error(`La ecuación de ${stale.map(cual => `${cual}(t)`).join(' y ')} se está actualizando o no es válida. Corrígela o espera antes de resolver.`);
     }
     lastX = x; lastH = h;
     const r = await fetch('/api/convolve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, h }) });
@@ -615,28 +635,34 @@ $$('.tabs button[data-tab]').forEach(b => b.onclick = () => {
 // (el botón de tema va aparte: no es una pestaña)
 $('#btnTema').onclick = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
 syncThemeButton();  // sincroniza icono/título con el tema fijado en <head>
-$('#addX').onclick = () => tramoRow($('#xRows'), { a: '0', b: 'oo', expr: '1' });
-$('#addH').onclick = () => tramoRow($('#hRows'), { a: '0', b: 'oo', expr: '1' });
+$('#addX').onclick = () => { usarTramosManuales('x'); tramoRow($('#xRows'), { a: '0', b: 'oo', expr: '1' }); };
+$('#addH').onclick = () => { usarTramosManuales('h'); tramoRow($('#hRows'), { a: '0', b: 'oo', expr: '1' }); };
 $('#resetEjemplo').onclick = aplicarEjemplo;
-$('#xToTramos').onclick = () => descomponerSingle('x');
-$('#hToTramos').onclick = () => descomponerSingle('h');
-$('#xSingle').addEventListener('keydown', (e) => { if (e.key === 'Enter') descomponerSingle('x'); });
-$('#hSingle').addEventListener('keydown', (e) => { if (e.key === 'Enter') descomponerSingle('h'); });
-// Si cambia una ecuación ya separada, sus filas dejan de ser confiables hasta
-// regenerarlas. Así nunca se resuelve una versión anterior de la señal.
-function markSplitStale(cual) {
+function usarTramosManuales(cual) {
   const inp = cual === 'x' ? $('#xSingle') : $('#hSingle');
   const msg = cual === 'x' ? $('#xSingleMsg') : $('#hSingleMsg');
-  const state = splitState[cual];
-  if (state.source !== null && inp.value !== state.source) {
-    state.stale = true;
-    msg.textContent = 'La ecuación cambió: vuelve a pulsar Separar en tramos antes de resolver.';
-  } else if (!state.stale) {
-    msg.textContent = '';
+  if (inp.value.trim()) {
+    inp.value = '';
+    splitRequestVersion[cual] += 1;
+    splitState[cual] = { source: null, stale: false };
+    msg.textContent = 'Edición manual de tramos.';
   }
 }
-$('#xSingle').addEventListener('input', () => markSplitStale('x'));
-$('#hSingle').addEventListener('input', () => markSplitStale('h'));
+function actualizarSingle(cual) {
+  const inp = cual === 'x' ? $('#xSingle') : $('#hSingle');
+  const msg = cual === 'x' ? $('#xSingleMsg') : $('#hSingleMsg');
+  if (!inp.value.trim()) {
+    splitRequestVersion[cual] += 1;
+    splitState[cual] = { source: null, stale: false };
+    msg.textContent = '';
+    return;
+  }
+  splitState[cual].stale = true;
+  msg.textContent = 'Actualizando tramos…';
+  sincronizarSingle[cual]();
+}
+$('#xSingle').addEventListener('input', () => actualizarSingle('x'));
+$('#hSingle').addEventListener('input', () => actualizarSingle('h'));
 $('#resolver').onclick = resolver;
 $('#resolverInt').onclick = resolverInt;
 // Slider en vivo: el número se actualiza al instante y la gráfica sigue al
