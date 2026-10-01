@@ -1,0 +1,106 @@
+{% set nav_activo = 'conv' %}
+{% extends "base.html" %}
+{% block title %}Convolución continua — método en 5 pasos{% endblock %}
+{% block description %}Solucionador de convolución continua paso a paso: h(t−τ), x(τ), intervalos, integrales y respuesta por tramos. Señales y Sistemas.{% endblock %}
+{% block content %}
+<!-- ================= CONVOLUCIÓN ================= -->
+<div class="layout">
+    <div class="col-input">
+      <div class="card">
+        <div class="card-head">
+          <h2><svg class="icon h2-ic"><use href="#i-sigma"/></svg>Señales</h2>
+          <button id="resetEjemplo" class="ghost" type="button"><svg class="icon"><use href="#i-reset"/></svg>Restablecer ejemplo</button>
+        </div>
+        <p class="note" id="presetNota"></p>
+
+        <div class="palette-block">
+          <div class="palette-title">Símbolos <span class="hint">— se insertan donde estés escribiendo</span></div>
+          <div class="palette" id="palette">
+            <button data-ins="t">t</button>
+            <button data-ins="tau">τ</button>
+            <button data-ins="exp()">exp()</button>
+            <button data-ins="e^()">e^()</button>
+            <button data-ins="^2">²</button>
+            <button data-ins="^">^</button>
+            <button data-ins="sin()">sin()</button>
+            <button data-ins="cos()">cos()</button>
+            <button data-ins="sqrt()">√()</button>
+            <button data-ins="pi">π</button>
+            <button data-ins="*">×</button>
+            <button data-ins="/">÷</button>
+            <button data-ins="()">( )</button>
+            <button data-ins="u(t)">u(t)</button>
+            <button data-ins="oo">∞</button>
+            <button data-ins="-oo">−∞</button>
+          </div>
+          <p class="hint">Escriba con soltura: <code>5t</code>, <code>2(t+1)</code>, <code>e^(-3t)</code>, <code>5e-3t</code>, <code>t^2</code>, <code>sen(t)</code>. En productos con escalones use <code>*</code> explícito, por ejemplo <code>t*u(t+10)*u(-t)-t*u(t-10)*u(-t+20)</code>. Cada tramo se previsualiza al escribirlo.</p>
+        </div>
+
+        <div class="sig-block">
+          <div class="sig-head">
+            <h3>x(t) <span class="hint">entrada</span></h3>
+            <button id="addX" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Añadir tramo</button>
+          </div>
+          <div class="single-expr">
+            <input id="xSingle" placeholder="señal completa, se separa automáticamente" spellcheck="false" autocomplete="off" aria-label="Señal x(t) completa">
+          </div>
+          <div class="hint msg" id="xSingleMsg" aria-live="polite"></div>
+          <div id="xRows"></div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-head">
+            <h3>h(t) <span class="hint">respuesta al impulso</span></h3>
+            <button id="addH" class="ghost"><svg class="icon"><use href="#i-plus"/></svg>Añadir tramo</button>
+          </div>
+          <div class="single-expr">
+            <input id="hSingle" placeholder="señal completa, se separa automáticamente" spellcheck="false" autocomplete="off" aria-label="Señal h(t) completa">
+          </div>
+          <div class="hint msg" id="hSingleMsg" aria-live="polite"></div>
+          <div id="hRows"></div>
+        </div>
+
+        <button id="resolver" class="primary big"><svg class="icon"><use href="#i-sigma"/></svg>Resolver convolución</button>
+        <div id="loadingConv" class="loading" hidden><span class="spinner" aria-hidden="true"></span>Calculando con SymPy…</div>
+        <div id="errConv" class="error" role="alert"></div>
+      </div>
+    </div>
+
+    <div class="col-out">
+      <div class="card" id="resultado" style="display:none">
+        <div class="card-head">
+          <h2><svg class="icon h2-ic"><use href="#i-check-circle"/></svg>Solución</h2>
+          <button id="btnCopiar" class="ghost" title="Copiar el procedimiento completo como texto"><svg class="icon"><use href="#i-copy"/></svg>Copiar procedimiento</button>
+          <button id="btnCopiarLink" class="ghost" type="button" title="Copiar el enlace para compartir esta solución"><svg class="icon"><use href="#i-link"/></svg>Copiar enlace</button>
+        </div>
+        <div class="def" id="defConv"></div>
+        <div id="senalesTramos"></div>
+        <div id="criterioFija"></div>
+        <div id="avisosConv"></div>
+        <h3 class="paso-h3"><span class="nchip">1</span> Obtener h(t−τ), la señal móvil <span class="hint">reflejo + corrimiento</span></h3><div id="p1"></div>
+        <h3 class="paso-h3"><span class="nchip">2</span> Obtener x(τ), la señal fija <span class="hint">cambio de variable</span></h3><div id="p2"></div>
+        <h3 class="paso-h3"><span class="nchip">3</span> Identificar los intervalos de t <span class="hint">dónde inicia y(t)</span></h3><div id="p3"></div>
+        <h3 class="paso-h3"><span class="nchip">4</span> Multiplicar x(τ)·h(t−τ) e integrar en τ</h3><div id="p4"></div>
+        <h3 class="paso-h3"><span class="nchip">5</span> Respuesta final por tramos</h3><div id="p5"></div>
+      </div>
+
+      <div class="card">
+        <h2><svg class="icon h2-ic"><use href="#i-chart"/></svg>Gráficas</h2>
+        <div class="plots">
+          <div id="plotXH" class="plot"><div class="plot-hint"><svg class="icon"><use href="#i-chart"/></svg>x(t) y h(t) aparecen al resolver la convolución</div></div>
+          <div id="plotY" class="plot"><div class="plot-hint"><svg class="icon"><use href="#i-chart"/></svg>y(t) aparece al resolver la convolución</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2><svg class="icon h2-ic"><use href="#i-sliders"/></svg>Solape en τ</h2>
+        <p class="hint">Mueva t y observe cómo se desplaza h(t−τ) sobre x(τ); el área sombreada es y(t).</p>
+        <div class="slider-row">
+          <input type="range" id="sliderT" min="-12" max="18" step="0.1" value="1" aria-label="Valor de t para el solape">
+          <div class="t-read">t = <b id="tVal">1</b> · área ≈ <b id="areaVal">—</b></div>
+        </div>
+        <div class="hint" id="regionRead"></div>
+        <div id="plotSolape" class="plot"><div class="plot-hint"><svg class="icon"><use href="#i-sliders"/></svg>Aparece al resolver, o al mover t después de resolver</div></div>
+      </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}<script defer src="/static/convolucion.js"></script>{% endblock %}

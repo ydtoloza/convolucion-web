@@ -1,0 +1,44 @@
+{% set nav_activo = 'integ' %}
+{% extends "base.html" %}
+{% block title %}Integrales paso a paso — Convolución continua{% endblock %}
+{% block description %}Resuelve integrales definidas e indefinidas paso a paso: primitiva, evaluación en los límites y verificación por derivación. Señales y Sistemas.{% endblock %}
+{% block content %}
+<!-- ================= INTEGRALES ================= -->
+<div class="layout single">
+    <div class="card">
+      <div class="card-head">
+        <h2><span class="h2-ic glyph">∫</span>Integral paso a paso</h2>
+        <button id="btnCopiarLink" class="ghost" type="button" title="Copiar el enlace para compartir esta solución"><svg class="icon"><use href="#i-link"/></svg>Copiar enlace</button>
+      </div>
+      <div class="palette" id="palette2">
+        <button data-ins="tau">τ</button>
+        <button data-ins="t">t</button>
+        <button data-ins="exp()">exp()</button>
+        <button data-ins="^2">²</button>
+        <button data-ins="sin()">sin()</button>
+        <button data-ins="cos()">cos()</button>
+        <button data-ins="sqrt()">√()</button>
+        <button data-ins="()">( )</button>
+        <button data-ins="oo">∞</button>
+      </div>
+      <div class="int-grid">
+        <label class="span2">Integrando f
+          <input id="intExpr" value="6*tau" autocomplete="off" spellcheck="false">
+          <div class="preview" id="intPreview"><span class="hint">vista previa…</span></div>
+        </label>
+        <label>Variable
+          <select id="intVar"><option value="tau">τ (tau)</option><option value="t">t</option></select>
+        </label>
+        <label>Límite inferior a <input id="intA" value="-4"></label>
+        <label>Límite superior b <input id="intB" value="t"></label>
+      </div>
+      <p class="hint">Deje <b>a</b> y <b>b</b> vacíos para la integral indefinida. Acepta <code>oo</code>, <code>tau^2*exp(-tau)</code>, <code>tau*sin(tau)</code>, <code>1/(1+tau^2)</code>.</p>
+      <div class="row">
+        <button id="resolverInt" class="primary"><svg class="icon"><use href="#i-sigma"/></svg>Resolver integral</button>
+      </div>
+      <div id="errInt" class="error" role="alert"></div>
+      <div id="intRes"></div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}<script defer src="/static/integrales.js"></script>{% endblock %}

@@ -3,6 +3,31 @@
 Registro de todo lo trabajado sobre este proyecto. Las etiquetas entre paréntesis
 (`BUG-x`, `OPT-x`, `DESIGN-x`) son las que se usan en los comentarios del código.
 
+## 2026-09-30 — Multipágina con soluciones compartibles por enlace
+
+- **De SPA de pestañas a multipágina.** Cada sección pasa a ser una página con
+  ruta propia: `/convolucion`, `/integrales` y `/teoria` (`/` redirige a
+  `/convolucion`). La navegación del header deja los botones `data-tab` y usa
+  enlaces reales (`<a class="tab-link">`) con clase `active` y
+  `aria-current="page"` en la página actual: la nav funciona sin JS, cada
+  sección tiene URL propia e histórica y las secciones `<section class="tab">`
+  desaparecen.
+- **Estado de la ecuación en la URL.** Al resolver, las entradas se serializan
+  en la query string con `history.replaceState`: en Convolución los tramos de x
+  e h (`x0a`/`x0b`/`x0e`, …), en Integrales `expr`, `var`, `a` y `b`. Al abrir
+  un enlace compartido, la página se auto-resuelve con esas entradas (la URL
+  solo lleva entradas: el servidor sigue siendo quien calcula).
+- **Botón «Copiar enlace»** en las tarjetas de solución: copia la URL con el
+  estado ya puesto en la query, lista para pegar y compartir la solución tal
+  cual se resolvió.
+- **JS dividido por página:** `app.js` se parte en `base.js` (tema, iconos,
+  utilidades), `convolucion.js` e `integrales.js`; cada página carga solo el
+  base y su script.
+- **OG tags por página:** cada URL compartida tiene su propia vista previa
+  (título/descripción) en redes y chats.
+- **Fix:** el botón «Copiar» perdía su ícono al mostrar el estado «Copiado»;
+  corregido para conservarlo.
+
 ## 2026-09-06 — Convergencia: «no converge» en vez de ∞ disfrazado (BUG-15)
 
 - **Detección de integrales que no convergen.** Con tramos de soporte infinito

@@ -8,7 +8,7 @@ Metodología en 5 pasos:
   Paso 4: Multiplicar x(tau)*h(t-tau) e integrar sobre tau
   Paso 5: Fin o hay más intervalos? -> respuesta final por tramos
 """
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 import sympy as sp
 import traceback
 import re
@@ -1262,9 +1262,25 @@ def solve_integral_cached(expr_str, a_str=None, b_str=None, var_name='tau'):
 
 
 # ---------------------------------------------------------------- rutas
+# App multipágina: cada sección tiene su propia URL compartible.
 @app.route('/')
-def index():
-    return render_template('index.html', presets=PRESETS)
+def raiz():
+    return redirect(url_for('pagina_convolucion'))
+
+
+@app.route('/convolucion')
+def pagina_convolucion():
+    return render_template('convolucion.html')
+
+
+@app.route('/integrales')
+def pagina_integrales():
+    return render_template('integrales.html')
+
+
+@app.route('/teoria')
+def pagina_teoria():
+    return render_template('teoria.html')
 
 
 @app.route('/api/presets')

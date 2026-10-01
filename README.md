@@ -55,5 +55,5 @@ Ese script hace: `docker pull` de `latest`, recreate del contenedor y health che
 |---|---|
 | `app.py` | Motor de convolución/integrales + API Flask |
 | `gunicorn.conf.py` | Config de producción (workers sync, reciclado por max_requests) |
-| `templates/`, `static/` | Interfaz (pestañas Convolución / Integrales / Teoría) |
+| `templates/`, `static/` | Interfaz multipágina (Convolución / Integrales / Teoría) con soluciones compartibles por enlace |
 | `Dockerfile`, `docker-compose.yml` | Imagen de producción (python:3.12-slim) |

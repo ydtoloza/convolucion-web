@@ -82,20 +82,17 @@ a:hover{color:var(--accent)}
 h1{margin:0;font-family:var(--font-display);font-weight:700;font-size:21px;letter-spacing:.1px;line-height:1.2}
 .sub{margin:1px 0 0;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:1.3px;text-transform:uppercase}
 .tabs{display:flex;gap:4px;align-self:end}
-.tabs button{display:inline-flex;align-items:center;gap:7px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:12px 12px 13px;cursor:pointer;font-size:14px;font-weight:500;font-family:var(--font-ui);transition:color var(--tr),border-color var(--tr)}
-.tabs button .icon{width:15px;height:15px}
-.tabs button .glyph{font-size:17px;line-height:1}
-.tabs button:hover{color:var(--ink)}
-.tabs button.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tabs a.tab-link{display:inline-flex;align-items:center;gap:7px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:12px 12px 13px;cursor:pointer;font-size:14px;font-weight:500;font-family:var(--font-ui);text-decoration:none;transition:color var(--tr),border-color var(--tr)}
+.tabs a.tab-link .icon{width:15px;height:15px}
+.tabs a.tab-link .glyph{font-size:17px;line-height:1}
+.tabs a.tab-link:hover{color:var(--ink)}
+.tabs a.tab-link.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
 .theme-btn{display:grid;place-items:center;width:34px;height:34px;background:transparent;border:1px solid var(--hairline-2);border-radius:var(--r-sm);color:var(--ink-2);cursor:pointer;align-self:center;margin:0 4px 10px 12px;transition:border-color var(--tr),color var(--tr),background var(--tr)}
 .theme-btn .icon{width:15.5px;height:15.5px}
 .theme-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 
 main{padding:28px 24px 8px}
 @media(max-width:600px){main{padding:20px 16px 8px}}
-.tab{display:none}
-.tab.active{display:block;animation:fadeIn 220ms ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
 /* ---------- tarjetas ---------- */
 .card{background:var(--card);border:1px solid var(--hairline);border-radius:var(--r-lg);padding:22px 24px;margin-bottom:22px;box-shadow:var(--shadow-card)}
@@ -128,7 +125,7 @@ button.ghost{display:inline-flex;align-items:center;gap:6px;background:transpare
 button.ghost .icon{width:13.5px;height:13.5px}
 button.ghost:hover{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
 button.ghost.copy-ok{border-color:var(--ok-line);color:var(--ok);background:var(--ok-bg)}
-#btnCopiar,#btnCopiarProc,#resetEjemplo{white-space:nowrap}
+#btnCopiar,#btnCopiarLink,#btnCopiarProc,#resetEjemplo{white-space:nowrap}
 
 /* ---------- teclado de símbolos ---------- */
 .palette-block{background:var(--paper-2);border:1px solid var(--hairline);border-radius:var(--r-md);padding:13px 14px;margin:14px 0 2px}
@@ -252,6 +249,5 @@ footer small{color:var(--muted);font-size:12px}
   .topbar,.col-input,.slider-row,#regionRead,footer,.plot,.loading,.error{display:none!important}
   .layout{display:block}
   .card{border:none;box-shadow:none;padding:0;margin-bottom:18px}
-  .tab{display:none}.tab.active{display:block}
   body{background:#fff}
 }

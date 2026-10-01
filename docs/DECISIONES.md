@@ -89,3 +89,12 @@ más allá de oscuro/claro.
   cachés de SymPy.
 - **Static/templates dentro de la imagen** (sin volúmenes): la imagen es
   inmutable y versionada por tag; actualizar = pull + recreate.
+- **Enlaces compartibles: estado en la query string, no en el servidor**
+  (2026-09-30). La URL solo lleva ENTRADAS (tramos de x/h, integral) y quien
+  abre el enlace auto-resuelve contra la API: sin tabla de enlaces, sin base de
+  datos, sin short-URLs. Una URL compartida siempre reproduce el cálculo con la
+  versión actual del motor y no hay nada que expire. Parámetros por segmento
+  (`x0a`/`x0b`/`x0e`, …) en vez de uno solo con delimitadores: no hay separador
+  que escapar ni inyección posible, y `+`/`*` viajan intactos por
+  `URLSearchParams`. `history.replaceState` al resolver (no `pushState`): la
+  URL refleja lo resuelto sin llenar el historial con cada cálculo.

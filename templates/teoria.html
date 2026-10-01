@@ -1,0 +1,68 @@
+{% set nav_activo = 'teoria' %}
+{% extends "base.html" %}
+{% block title %}Teoría — Convolución continua{% endblock %}
+{% block description %}Procedimiento general en 5 pasos para la convolución continua: h(t−τ), x(τ), puntos críticos, integración por intervalos y respuesta por tramos.{% endblock %}
+{% block content %}
+<!-- ================= TEORÍA ================= -->
+<div class="layout single">
+    <div class="card">
+      <div class="card-head">
+        <h2><svg class="icon h2-ic"><use href="#i-book"/></svg>Procedimiento general · 5 pasos</h2>
+        <button id="btnCopiarProc" class="ghost" title="Copiar el procedimiento general como texto"><svg class="icon"><use href="#i-copy"/></svg>Copiar</button>
+      </div>
+      <p class="note">Siga este algoritmo <b>en orden</b>: sirve para cualquier pareja de señales x(t), h(t) y para las integrales que aparezcan. Con \( \tau \) como variable de integración y \( t \) fijo.</p>
+      <div class="def">\( \displaystyle y(t)=x(t)*h(t)=\int_{-\infty}^{\infty}x(\tau)\,h(t-\tau)\,d\tau \)</div>
+
+      <h3 class="paso-h3"><span class="nchip">1</span> Obtener h(t−τ), la señal móvil — reflejo + corrimiento</h3>
+      <ol class="steps">
+        <li>Escriba \(h_j(t)\) con su soporte: \(h_j(t)=f(t)\) si \(a_j\le t\le b_j\); \(0\) en otro caso.</li>
+        <li>Sustituya \(t\to t-\tau\) en la fórmula <b>y en el soporte</b>: \(a_j\le t-\tau\le b_j\).</li>
+        <li>Reste \(t\) en toda la desigualdad: \(a_j-t\le-\tau\le b_j-t\).</li>
+        <li>Multiplique por \(-1\) (las desigualdades se invierten): \(t-b_j\le\tau\le t-a_j\).</li>
+      </ol>
+      <p class="hint">Así, \(h_j(t-\tau)\) solo está activo en \(t-b_j\le\tau\le t-a_j\).</p>
+
+      <h3 class="paso-h3"><span class="nchip">2</span> Obtener x(τ), la señal fija — cambio de variable</h3>
+      <ol class="steps">
+        <li>Sustituya \(t\to\tau\): \(x_i(\tau)\) activo en \(a_i\le\tau\le b_i\).</li>
+        <li>Conviene dejar <b>fija</b> la señal de soporte más ancho y reflejar la otra; si hace falta, intercambie x↔h. El resultado no cambia porque \(x*h=h*x\).</li>
+      </ol>
+
+      <h3 class="paso-h3"><span class="nchip">3</span> Identificar los intervalos de t y de τ</h3>
+      <ol class="steps">
+        <li><b>Puntos críticos:</b> \(t_c=(\text{borde de }x)+(\text{borde de }h)\), todas las combinaciones finitas; ordénelos.</li>
+        <li>Los críticos dividen la recta de \(t\) en intervalos; \(y(t)\) <b>inicia</b> donde aparece el primer solape.</li>
+        <li>En cada intervalo tome un \(t\) de prueba y obtenga el solape en \(\tau\): \([\max(a_i,\,t-b_j),\,\min(b_i,\,t-a_j)]\) — si queda vacío, \(y=0\) en ese intervalo.</li>
+      </ol>
+
+      <h3 class="paso-h3"><span class="nchip">4</span> Multiplicar e integrar, intervalo por intervalo</h3>
+      <ol class="steps">
+        <li>Plantee la integral con los límites reales: \( \displaystyle y(t)=\int_{lo}^{hi}\big(x_i(\tau)\big)\big(h_j(t-\tau)\big)\,d\tau \). Si el solape «entra y sale» por tramos distintos, escriba una integral entrante y una saliente, y súmelas.</li>
+        <li>Expanda y simplifique el integrando <b>sin saltarse operaciones</b>.</li>
+        <li>Aplique la regla: \(\int \tau^n d\tau=\frac{\tau^{n+1}}{n+1}\) · \(\int e^{k\tau}d\tau=\frac{e^{k\tau}}{k}\) · \(\int \operatorname{sen}(k\tau)d\tau=-\frac{\cos(k\tau)}{k}\) · \(\int \cos(k\tau)d\tau=\frac{\operatorname{sen}(k\tau)}{k}\) · polinomio×exponencial → <b>integración por partes</b> (tabular).</li>
+        <li>Integre término a término → primitiva \(F(\tau)\).</li>
+        <li>Evalúe \(F(hi)\) y \(F(lo)\) <b>por separado</b>.</li>
+        <li>Reste (Teorema Fundamental del Cálculo): \(y=F(hi)-F(lo)\) y simplifique.</li>
+      </ol>
+
+      <h3 class="paso-h3"><span class="nchip">5</span> ¿Fin o hay más intervalos?</h3>
+      <ol class="steps">
+        <li>Tras cada intervalo pregúntese si faltan intervalos por analizar; si sí, repita los pasos 3–4.</li>
+        <li>Escriba la respuesta final <b>por tramos</b> (y, si se pide, la forma compacta con escalones \(u(t)\)).</li>
+      </ol>
+
+      <h3 class="paso-h3"><span class="nchip">∫</span> Adaptación a cualquier integral \( \int f\,d\tau \) (con o sin límites)</h3>
+      <ol class="steps">
+        <li>Transcribir el integrando tal cual.</li>
+        <li>Expandir y agrupar términos semejantes.</li>
+        <li>Identificar la regla (potencia, exponencial, trigonométrica, partes).</li>
+        <li>Integrar término a término → \(F(\tau)+C\).</li>
+        <li><b>Verificar</b> derivando: \(dF/d\tau\) debe devolver el integrando.</li>
+        <li>Si hay límites: evaluar \(F(b)\) y \(F(a)\) por separado.</li>
+        <li>Restar (TFC): \(\int_a^b f\,d\tau=F(b)-F(a)\), simplificando al final.</li>
+      </ol>
+
+      <p class="final-link"><svg class="icon"><use href="#i-link"/></svg>Videos de apoyo: <a href="https://www.youtube.com/playlist?list=PLt250Vkobc9wRscNIgFeJntAuo0EUB32J" target="_blank" rel="noopener">playlist Convolución (YouTube)</a>.</p>
+    </div>
+</div>
+{% endblock %}
