@@ -237,10 +237,10 @@ async function resolver() {
     // sumar) la recta de t no se divide — no se inventa t_c = {0}.
     $('#p3').innerHTML = c.length
       ? `<div class="paso math">
-          <span class="m">\\(t_c \\in \\{${c.map(v => Number(v).toFixed(2)).join(',\\;')}\\}\\)</span>` +
+          <span class="m">\\(t_c \\in \\{${c.map((v, i) => j.criticos_latex?.[i] ?? Number(v).toFixed(2)).join(',\\;')}\\}\\)</span>` +
         (j.criticos_detalle_latex ? `<span class="hint">Cada punto crítico es un borde de x más un borde de h.</span>
           <span class="m">\\[${j.criticos_detalle_latex}\\]</span>` : '') +
-        (j.t_inicio != null ? `<span class="m">\\(t_{\\text{inicio}} = ${fmtT(j.t_inicio)}\\)</span>` : '') +
+        (j.t_inicio != null ? `<span class="m">\\(t_{\\text{inicio}} = ${j.criticos_latex?.[0] ?? fmtT(j.t_inicio)}\\)</span>` : '') +
         `</div>`
       : `<div class="paso math">
           <span class="hint">sin puntos críticos (no hay bordes finitos que sumar): un único intervalo de t</span>
@@ -294,9 +294,14 @@ async function resolver() {
     $('#p5').innerHTML =
       `<div class="paso math"><span class="hint">por tramos</span><span class="m">\\[${j.y_tramos_latex}\\]</span></div>` +
       // la forma compacta con u(t) se omite si alguna integral no converge
-      (j.y_escalones_latex ? `<div class="paso math"><span class="hint">forma compacta con u(t)</span><span class="m">\\[${j.y_escalones_latex}\\]</span></div>` : '');
+      // en línea (no display) para que KaTeX la parta en los «+» en vez de mostrar una barra de desplazamiento
+      (j.y_escalones_latex ? `<div class="paso math"><span class="hint">forma compacta con u(t)</span><span class="m">\\(\\displaystyle ${j.y_escalones_latex}\\)</span></div>` : '');
+    // tarjeta de respuesta (arriba del desarrollo): solo y(t) por tramos
+    $('#respuesta').hidden = false;
+    $('#respuestaY').innerHTML = `\\[${j.y_tramos_latex}\\]`;
+    renderAll($('#respuesta'));
     renderAll($('#resultado'));
-    $('#resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('#respuesta').scrollIntoView({ behavior: 'smooth', block: 'start' });
     updateSolape();
     // Enlace compartible: tras cada resolución exitosa los datos quedan en la URL.
     sincronizarURL();
@@ -350,9 +355,9 @@ function plotAll(j) {
   Plotly.newPlot('plotXH', [
     { x: j.grid, y: j.x_vals, name: 'x(t)', type: 'scatter', line: { color: plotColors().x, width: 2 } },
     { x: j.grid, y: j.h_vals, name: 'h(t)', type: 'scatter', line: { color: plotColors().h, width: 2 } }
-  ], plotLayout({ title: 'x(t) y h(t)' }), { responsive: true });
+  ], plotLayout({ title: 'x(t) y h(t)' }), plotConfig());
   Plotly.newPlot('plotY', [{ x: j.grid, y: j.y_vals, name: 'y(t)', type: 'scatter', line: { color: plotColors().y, width: 2.5 } }],
-    plotLayout({ title: 'y(t) = x(t) ∗ h(t)', shapes: yShapes(null) }), { responsive: true });
+    plotLayout({ title: 'y(t) = x(t) ∗ h(t)', shapes: yShapes(null) }), plotConfig());
 }
 function renderSolape(tau, xv, hv, prod, t0) {
   quitarHint('plotSolape');
@@ -361,7 +366,7 @@ function renderSolape(tau, xv, hv, prod, t0) {
     { x: tau, y: hv, name: `h(${t0}−τ)`, type: 'scatter', line: { color: plotColors().h, width: 2 } },
     { x: tau, y: prod, name: 'producto', type: 'scatter', fill: 'tozeroy',
       fillcolor: plotColors().prodFill, line: { color: plotColors().h, width: 1.5 } }
-  ], plotLayout({ title: `Solape en τ · t = ${t0}` }), { responsive: true });
+  ], plotLayout({ title: `Solape en τ · t = ${t0}` }), plotConfig());
 }
 async function updateSolape() {
   if (!lastX.length) return;

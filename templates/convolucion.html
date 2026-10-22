@@ -5,8 +5,8 @@
 {% block content %}
 <!-- ================= CONVOLUCIÓN ================= -->
 <div class="layout">
-    <div class="col-input">
-      <div class="card">
+    <div class="col-main">
+      <div class="card" id="cardEntrada">
         <div class="card-head">
           <h2><svg class="icon h2-ic"><use href="#i-sigma"/></svg>Señales</h2>
           <button id="resetEjemplo" class="ghost" type="button"><svg class="icon"><use href="#i-reset"/></svg>Restablecer ejemplo</button>
@@ -63,15 +63,18 @@
         <div id="loadingConv" class="loading" hidden><span class="spinner" aria-hidden="true"></span>Calculando con SymPy…</div>
         <div id="errConv" class="error" role="alert"></div>
       </div>
-    </div>
 
-    <div class="col-out">
-      <div class="card" id="resultado" style="display:none">
-        <div class="card-head">
-          <h2><svg class="icon h2-ic"><use href="#i-check-circle"/></svg>Solución</h2>
+      <div class="card answer" id="respuesta" hidden>
+        <div class="answer-label">Respuesta</div>
+        <div id="respuestaY" class="answer-math"></div>
+        <div class="row">
           <button id="btnCopiar" class="ghost" title="Copiar el procedimiento completo como texto"><svg class="icon"><use href="#i-copy"/></svg>Copiar procedimiento</button>
           <button id="btnCopiarLink" class="ghost" type="button" title="Copiar el enlace para compartir esta solución"><svg class="icon"><use href="#i-link"/></svg>Copiar enlace</button>
         </div>
+      </div>
+
+      <div class="card paper" id="resultado" style="display:none">
+        <h2><svg class="icon h2-ic"><use href="#i-book"/></svg>Desarrollo</h2>
         <div class="def" id="defConv"></div>
         <div id="senalesTramos"></div>
         <div id="criterioFija"></div>
@@ -82,7 +85,9 @@
         <h3 class="paso-h3"><span class="nchip">4</span> Multiplicar x(τ)·h(t−τ) e integrar en τ</h3><div id="p4"></div>
         <h3 class="paso-h3"><span class="nchip">5</span> Respuesta final por tramos</h3><div id="p5"></div>
       </div>
+    </div>
 
+    <div class="col-side">
       <div class="card">
         <h2><svg class="icon h2-ic"><use href="#i-chart"/></svg>Gráficas</h2>
         <div class="plots">

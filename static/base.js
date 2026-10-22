@@ -34,16 +34,16 @@ function renderAll(el) {
 // aquí solo se alterna, se persiste y se avisa a la página para que repinte.
 const PLOT_PALETTES = {
   light: {
-    paper: '#ffffff', plot: '#ffffff', font: '#211d19',
-    grid: '#eceae2', zero: '#c9c4ba',
-    x: '#6f6a62', h: '#8c2f39', y: '#211d19',
-    marker: '#8c2f39', crit: '#c9c4ba', prodFill: 'rgba(140,47,57,.14)'
+    paper: '#ffffff', plot: '#ffffff', font: '#111215',
+    grid: '#ececE8', zero: '#b9bbc0',
+    x: '#1f5fd1', h: '#d63d27', y: '#111215',
+    marker: '#d63d27', crit: '#d6d6d1', prodFill: 'rgba(214,61,39,.14)'
   },
   dark: {
-    paper: '#211d19', plot: '#211d19', font: '#ede8df',
-    grid: '#332d27', zero: '#4a433b',
-    x: '#a39b8f', h: '#d68f95', y: '#ede8df',
-    marker: '#d68f95', crit: '#4a433b', prodFill: 'rgba(214,143,149,.16)'
+    paper: '#18191c', plot: '#18191c', font: '#ecedef',
+    grid: '#26282d', zero: '#4a4d55',
+    x: '#7aaeff', h: '#ff8a72', y: '#ecedef',
+    marker: '#ff8a72', crit: '#3a3d44', prodFill: 'rgba(240,85,58,.18)'
   }
 };
 function currentTheme() {
@@ -52,15 +52,25 @@ function currentTheme() {
 const plotColors = () => PLOT_PALETTES[currentTheme()];
 function plotLayout(extra) {
   const c = plotColors();
+  // En celular: ejes fijos (arrastrar desplaza la página en vez de hacer zoom)
+  // y leyenda abajo para que la curva use todo el ancho.
+  const touch = isTouchNarrow();
   return Object.assign({
-    margin: { t: 36, r: 10, l: 44, b: 36 },
+    margin: touch ? { t: 36, r: 8, l: 40, b: 30 } : { t: 36, r: 10, l: 44, b: 36 },
     paper_bgcolor: c.paper, plot_bgcolor: c.plot,
     font: { color: c.font },
-    xaxis: { gridcolor: c.grid, zerolinecolor: c.zero },
-    yaxis: { gridcolor: c.grid, zerolinecolor: c.zero }
+    xaxis: { gridcolor: c.grid, zerolinecolor: c.zero, fixedrange: touch },
+    yaxis: { gridcolor: c.grid, zerolinecolor: c.zero, fixedrange: touch },
+    dragmode: touch ? false : 'zoom',
+    legend: touch ? { orientation: 'h', x: 0, y: -0.18 } : {}
   }, extra || {});
 }
-const THEME_META = { light: '#f7f6f2', dark: '#161311' };
+// La barra de herramientas de Plotly sale al pasar el mouse; en pantallas
+// táctiles queda fija sobre el título, así que ahí se oculta.
+function plotConfig() {
+  return isTouchNarrow() ? { responsive: true, displayModeBar: false } : { responsive: true, displaylogo: false };
+}
+const THEME_META = { light: '#ffffff', dark: '#18191c' };
 function syncThemeButton() {
   const b = $('#btnTema');
   if (!b) return;
@@ -106,6 +116,128 @@ function bindPalette(id) {
     if (b) insertText(b.dataset.ins);
   });
 }
+
+// ---------- teclado matemático en celular (estilo Photomath) ----------
+// En pantallas táctiles angostas los campos usan inputmode="none" (no sale el
+// teclado del sistema) y se muestra este teclado anclado abajo. «ABC» vuelve
+// al teclado del sistema para ese campo hasta que pierda el foco.
+const EXPR_SEL = 'input:not([type]), input[type="text"], input[type="search"], textarea';
+const isTouchNarrow = () => window.matchMedia('(pointer: coarse) and (max-width: 900px)').matches;
+const KP_TABS = {
+  num: [
+    ['t', 't', 'var'], ['τ', 'tau', 'var'], ['7', '7'], ['8', '8'], ['9', '9'], ['÷', '/', 'op'],
+    ['(', '(', 'op'], [')', ')', 'op'], ['4', '4'], ['5', '5'], ['6', '6'], ['×', '*', 'op'],
+    ['x²', '^2', 'op'], ['xʸ', '^', 'op'], ['1', '1'], ['2', '2'], ['3', '3'], ['−', '-', 'op'],
+    ['u(t)', 'u(t)', 'fn'], ['∞', 'oo', 'op'], ['0', '0'], ['.', '.'], ['⌫', '', 'act', 'back'], ['+', '+', 'op']
+  ],
+  fn: [
+    ['exp( )', 'exp()', 'fn'], ['e^( )', 'e^()', 'fn'], ['sin( )', 'sin()', 'fn'], ['cos( )', 'cos()', 'fn'],
+    ['√( )', 'sqrt()', 'fn'], ['u( )', 'u()', 'fn'], ['( )', '()', 'fn'], ['π', 'pi', 'fn'],
+    ['∞', 'oo', 'fn'], ['−∞', '-oo', 'fn'], ['t', 't', 'var'], ['τ', 'tau', 'var']
+  ]
+};
+let kp = null, kpTab = 'num';
+function kpTarget() { const el = document.activeElement; return el && el.matches(EXPR_SEL) && !el.dataset.abc ? el : null; }
+function kpRender() {
+  kp.querySelector('.kp-grid').className = 'kp-grid kp-' + kpTab;
+  kp.querySelector('.kp-grid').innerHTML = KP_TABS[kpTab].map(([lbl, ins, cls = 'num', act]) =>
+    `<button type="button" class="kp-key ${cls}" ${act ? `data-act="${act}" aria-label="Borrar"` : `data-ins="${ins}"`}>${lbl}</button>`).join('');
+  kp.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === kpTab));
+}
+function kpMove(el, d) {
+  const p = Math.max(0, Math.min(el.value.length, (d < 0 ? el.selectionStart : el.selectionEnd) + d));
+  el.selectionStart = el.selectionEnd = p;
+}
+function kpBack(el) {
+  let s = el.selectionStart, en = el.selectionEnd;
+  if (s === en) { if (!s) return; s -= 1; }
+  el.value = el.value.slice(0, s) + el.value.slice(en);
+  el.selectionStart = el.selectionEnd = s;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function kpShow(show) {
+  if (!kp) return;
+  kp.hidden = !show;
+  document.body.classList.toggle('kp-open', show);
+  document.body.style.setProperty('--kp-h', show ? kp.offsetHeight + 'px' : '0px');
+}
+// Solo se desplaza si el campo quedó tapado por el teclado o por la barra
+// superior, y sin animación: un scroll suave aquí peleaba con el ajuste
+// propio de iOS Safari al enfocar y la página «rebotaba».
+function kpReveal(el) {
+  const r = el.getBoundingClientRect(), kpTop = kp.getBoundingClientRect().top;
+  const barBottom = ($('.topbar')?.getBoundingClientRect().bottom ?? 0) + 8;
+  let dy = 0;
+  if (r.bottom > kpTop - 12) dy = r.bottom - kpTop + 24;
+  else if (r.top < barBottom) dy = r.top - barBottom - 8;
+  if (dy) window.scrollBy({ top: dy, behavior: 'instant' });
+}
+function buildKeypad() {
+  kp = document.createElement('div');
+  kp.className = 'keypad'; kp.hidden = true;
+  kp.setAttribute('role', 'group'); kp.setAttribute('aria-label', 'Teclado matemático');
+  kp.innerHTML = `<div class="kp-bar">
+      <button type="button" class="kp-tab" data-tab="num">123</button>
+      <button type="button" class="kp-tab" data-tab="fn">f(x)</button>
+      <button type="button" class="kp-tab" data-act="abc">ABC</button>
+      <span class="kp-sp"></span>
+      <button type="button" class="kp-tab" data-act="left" aria-label="Mover cursor a la izquierda">←</button>
+      <button type="button" class="kp-tab" data-act="right" aria-label="Mover cursor a la derecha">→</button>
+      <button type="button" class="kp-done" data-act="done">Listo</button>
+    </div><div class="kp-grid"></div>`;
+  // pointerdown sin foco: el campo de texto conserva el foco y el cursor
+  kp.addEventListener('pointerdown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+  kp.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); const el = kpTarget();
+    if (!b || !el) return;
+    if (b.dataset.tab) { kpTab = b.dataset.tab; kpRender(); kpShow(true); kpReveal(el); return; }
+    const act = b.dataset.act;
+    if (act === 'back') kpBack(el);
+    else if (act === 'left') kpMove(el, -1);
+    else if (act === 'right') kpMove(el, 1);
+    else if (act === 'done') el.blur();
+    else if (act === 'abc') { kpShow(false); el.blur(); el.dataset.abc = '1'; el.inputMode = 'text'; el.focus(); }
+    else if (b.dataset.ins) insertText(b.dataset.ins);
+  });
+  document.body.appendChild(kp);
+  kpRender();
+}
+// iOS Safari desplaza la página por su cuenta al enfocar un campo con un toque
+// (no hay atributo que lo desactive). Como hace react-aria (usePreventScroll):
+// se cancela el touchend nativo y se enfoca a mano con preventScroll; luego
+// kpReveal mueve la página solo si el campo quedó tapado. Si el dedo se movió
+// era un scroll, no un toque, y no se intercepta.
+let kpTouch = null;
+document.addEventListener('touchstart', (e) => {
+  const el = e.target.closest && e.target.closest(EXPR_SEL);
+  kpTouch = el && isTouchNarrow() ? { el, x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+  if (kpTouch && !el.dataset.abc) el.inputMode = 'none';
+}, { passive: true, capture: true });
+document.addEventListener('touchend', (e) => {
+  const t = kpTouch; kpTouch = null;
+  if (!t || t.el.dataset.abc || document.activeElement === t.el) return;
+  const p = e.changedTouches[0];
+  if (Math.hypot(p.clientX - t.x, p.clientY - t.y) > 10) return;
+  e.preventDefault();
+  t.el.focus({ preventScroll: true });
+  const n = t.el.value.length;
+  try { t.el.setSelectionRange(n, n); } catch (_) { /* tipos sin selección */ }
+}, { passive: false, capture: true });
+document.addEventListener('focusin', (e) => {
+  const el = e.target;
+  if (!el.matches(EXPR_SEL) || !isTouchNarrow()) return;
+  if (!kp) buildKeypad();
+  if (el.dataset.abc) return;
+  el.inputMode = 'none';
+  kpShow(true);
+  kpReveal(el);
+});
+document.addEventListener('focusout', (e) => {
+  if (!e.target.matches(EXPR_SEL)) return;
+  delete e.target.dataset.abc;
+  // al saltar de un campo a otro el teclado no parpadea
+  setTimeout(() => { if (!kpTarget()) kpShow(false); }, 60);
+});
 
 // ---------- tiempos ----------
 function debounce(fn, ms) {
