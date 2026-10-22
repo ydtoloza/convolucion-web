@@ -9,12 +9,30 @@ Metodología en 5 pasos:
   Paso 5: Fin o hay más intervalos? -> respuesta final por tramos
 """
 from flask import Flask, request, jsonify, render_template, redirect, url_for
+from werkzeug.exceptions import RequestEntityTooLarge
 import sympy as sp
+from sympy.parsing.sympy_parser import (
+    parse_expr as sp_parse, standard_transformations,
+    implicit_multiplication_application, convert_xor)
+from functools import lru_cache
 import traceback
 import re
 import math
 import os
 import numpy as np  # DESIGN-1/OPT-4: import único a nivel de módulo
+
+_TRANSFORMATIONS = standard_transformations + (implicit_multiplication_application, convert_xor)
+
+# OPT-6: simplify es ~75% del tiempo de /api/convolve y se repite sobre las
+# mismas expresiones (F(t-a) aparece en varias regiones). Es determinista y las
+# expresiones SymPy son inmutables/hashables, así que memoizar no altera nada.
+@lru_cache(maxsize=4096)
+def _simplify(e):
+    # BUG-16: con trig×exp (ej. sen(t)·e^(−t)) trigsimp puede tardar minutos y
+    # el worker muere por timeout; ahí basta expandir y cancelar.
+    if e.has(sp.exp) and e.has(sp.sin, sp.cos, sp.tan):
+        return sp.cancel(sp.expand(e))
+    return sp.simplify(e)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024  # DESIGN-3: tope de 64 KB por petición
@@ -80,12 +98,7 @@ def normalize_math(s):
 
 def _sympy_parse(s, local):
     """Parsea con multiplicación implícita y ^ como potencia."""
-    from sympy.parsing.sympy_parser import (
-        parse_expr as sp_parse, standard_transformations,
-        implicit_multiplication_application, convert_xor)
-    transformations = standard_transformations + (
-        implicit_multiplication_application, convert_xor)
-    return sp_parse(s, local_dict=local, transformations=transformations)
+    return sp_parse(s, local_dict=local, transformations=_TRANSFORMATIONS)
 
 
 def parse_bound(s):
@@ -165,8 +178,10 @@ def latex(e):
         return str(e)
 
 
-def fmt_u_shift(v):
+def fmt_u_shift(v, exacto=None):
     """Formatea (t - v) evitando 't--10': v=-10 -> 't+10', v=8 -> 't-8'."""
+    if exacto and v in exacto:
+        return latex(t - exacto[v])
     if v == float('-inf') or v == float('inf'):
         return f"t-{fmt_num(v)}"
     if v == 0:
@@ -174,7 +189,9 @@ def fmt_u_shift(v):
     return f"t+{fmt_num(-v)}" if v < 0 else f"t-{fmt_num(v)}"
 
 
-def fmt_num(x):
+def fmt_num(x, exacto=None):
+    if exacto and x in exacto:
+        return latex(exacto[x])
     if x == float('inf'):
         return r'+\infty'
     if x == float('-inf'):
@@ -184,16 +201,18 @@ def fmt_num(x):
     return f"{x:.4g}"
 
 
-def intervalo_t_latex(lo, hi, primero=False, ultimo=False):
+def intervalo_t_latex(lo, hi, primero=False, ultimo=False, exacto=None):
     """Devuelve condición tipo 't < 0' o '-4 \\le t < 0' en latex."""
+    def fmt(v):
+        return fmt_num(v, exacto)
     if lo == float('-inf') and hi == float('inf'):
         return r'-\infty < t < +\infty'
     if lo == float('-inf'):
-        return rf't < {fmt_num(hi)}'
+        return rf't < {fmt(hi)}'
     if hi == float('inf'):
-        return rf't \ge {fmt_num(lo)}'
+        return rf't \ge {fmt(lo)}'
     # BUG-1: se eliminó la rama inalcanzable `if primero and lo == -inf`
-    return rf'{fmt_num(lo)} \le t \le {fmt_num(hi)}' if ultimo else rf'{fmt_num(lo)} \le t < {fmt_num(hi)}'
+    return rf'{fmt(lo)} \le t \le {fmt(hi)}' if ultimo else rf'{fmt(lo)} \le t < {fmt(hi)}'
 
 
 def cond_var_latex(var, a, b):
@@ -239,7 +258,9 @@ def _txt_expr(e):
     return s
 
 
-def _txt_num(x):
+def _txt_num(x, exacto=None):
+    if exacto and x in exacto:
+        return _txt_expr(exacto[x])
     if x == float('inf'):
         return '+∞'
     if x == float('-inf'):
@@ -249,16 +270,18 @@ def _txt_num(x):
     return f"{x:.4g}"
 
 
-def _cond_txt(lo, hi, ultimo=False):
+def _cond_txt(lo, hi, ultimo=False, exacto=None):
     """Condición de t en texto plano ('−4 ≤ t < 0', 't ≥ 8')."""
+    def fmt(v):
+        return _txt_num(v, exacto)
     if lo == float('-inf') and hi == float('inf'):
         return 'todo t'
     if lo == float('-inf'):
-        return f't < {_txt_num(hi)}'
+        return f't < {fmt(hi)}'
     if hi == float('inf'):
-        return f't ≥ {_txt_num(lo)}'
+        return f't ≥ {fmt(lo)}'
     op = '≤' if ultimo else '<'
-    return f'{_txt_num(lo)} ≤ t {op} {_txt_num(hi)}'
+    return f'{fmt(lo)} ≤ t {op} {fmt(hi)}'
 
 
 def _ineq_txt(a, b, var_txt='t'):
@@ -450,7 +473,7 @@ def split_by_heaviside(expr_str, var_name='t'):
                 continue
             vals[H] = sp.Integer(1 if c > 0 else 0)
         try:
-            exprk = sp.simplify(f.xreplace(vals))
+            exprk = _simplify(f.xreplace(vals))
         except Exception:
             continue
         if exprk == 0:
@@ -461,7 +484,7 @@ def split_by_heaviside(expr_str, var_name='t'):
     for s in raw:
         if segs:
             try:
-                if sp.simplify(sp.sympify(segs[-1]['expr']) - sp.sympify(s['expr'])) == 0:
+                if _simplify(sp.sympify(segs[-1]['expr']) - sp.sympify(s['expr'])) == 0:
                     segs[-1]['b'] = s['b']
                     continue
             except Exception:
@@ -475,7 +498,7 @@ def paso1_h(h_segs):
     pasos = []
     for j, s in enumerate(h_segs):
         ah, bh, eh = s['a'], s['b'], s['expr']
-        eh_tt = sp.simplify(eh.subs(t, t - tau))
+        eh_tt = _simplify(eh.subs(t, t - tau))
         fin_a = _finito(ah)  # BUG-2: igualdad robusta en vez de `is`
         fin_b = _finito(bh)
         T = _txt_expr
@@ -540,7 +563,7 @@ def paso2_x(x_segs):
     pasos = []
     for j, s in enumerate(x_segs):
         ax, bx, ex = s['a'], s['b'], s['expr']
-        ex_tau = sp.simplify(ex.subs(t, tau))
+        ex_tau = _simplify(ex.subs(t, tau))
         n = j + 1
         todo_r = (ax == -sp.oo and bx == sp.oo)
         cola = '' if todo_r else ' ; 0 en otro caso'
@@ -558,7 +581,11 @@ def paso2_x(x_segs):
 
 
 def critical_points(x_segs, h_segs):
+    """Devuelve (críticos float ordenados, {float: forma exacta}). La forma
+    exacta solo se guarda para irracionales sin decimales (ej. π−1); los
+    racionales se siguen mostrando como siempre (fmt_num / nsimplify)."""
     cand = set()
+    exacto = {}
     for xs in x_segs:
         for hs in h_segs:
             for s1, n1 in [(xs['a'], xs['a_num']), (xs['b'], xs['b_num'])]:
@@ -567,10 +594,14 @@ def critical_points(x_segs, h_segs):
                     if not math.isfinite(n1) or not math.isfinite(n2):
                         continue
                     try:
-                        cand.add(float((s1 + s2).evalf()))
+                        suma = s1 + s2
+                        v = float(suma.evalf())
                     except Exception:
                         continue
-    return sorted(c for c in cand if math.isfinite(c))
+                    cand.add(v)
+                    if not suma.is_Rational and not suma.has(sp.Float):
+                        exacto.setdefault(v, suma)
+    return sorted(c for c in cand if math.isfinite(c)), exacto
 
 
 def critical_points_details(x_segs, h_segs):
@@ -600,8 +631,11 @@ def critical_points_details(x_segs, h_segs):
         pares = origenes[valor]
         sumas_latex = [rf"({latex(a)})+({latex(b)})" for a, b in pares]
         sumas_txt = [f"({_txt_expr(a)})+({_txt_expr(b)})" for a, b in pares]
-        punto_latex = latex(_num_to_sym(valor))
-        punto_txt = _txt_num(valor)
+        suma = pares[0][0] + pares[0][1]
+        if not suma.is_Rational and not suma.has(sp.Float):  # exacto, ej. π−1
+            punto_latex, punto_txt = latex(suma), _txt_expr(suma)
+        else:
+            punto_latex, punto_txt = latex(_num_to_sym(valor)), _txt_num(valor)
         lineas_latex.append(rf"{punto_latex} &= " + r" = ".join(sumas_latex))
         lineas_txt.append(f"{punto_txt} = " + ' = '.join(sumas_txt))
     return (r"\begin{aligned}" + r" \\ ".join(lineas_latex) + r"\end{aligned}",
@@ -650,7 +684,7 @@ def overlap_details(o, xs, hs):
     return tex, txt
 
 
-def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, criticos_detalle_txt, regiones):
+def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, criticos_detalle_txt, regiones, exacto=None):
     """Procedimiento en texto plano (unicode), listo para copiar al cuaderno:
     solo matemática, una línea por paso, sin explicaciones."""
     L = []
@@ -668,10 +702,10 @@ def _procedimiento_txt(x_segs, h_segs, p1, p2, crit, criticos_detalle_txt, regio
     # intervalo (los críticos son sumas de bordes finitos; si no hay, la recta
     # de t no se divide).
     if crit:
-        ap('t_c = {' + ', '.join(_txt_num(c) for c in crit) + '}')
+        ap('t_c = {' + ', '.join(_txt_num(c, exacto) for c in crit) + '}')
         if criticos_detalle_txt:
             ap('Cálculo de t_c: ' + criticos_detalle_txt)
-        ap('y(t) inicia en t = ' + _txt_num(min(crit)))
+        ap('y(t) inicia en t = ' + _txt_num(min(crit), exacto))
     else:
         ap('No hay puntos críticos (no hay bordes finitos que sumar): un único intervalo de t')
     ap('')
@@ -801,7 +835,7 @@ def _aviso_divergencia(low_sym, high_sym, integrando):
 def solve_convolution_from_segs(x_segs, h_segs):
     p1 = paso1_h(h_segs)
     p2 = paso2_x(x_segs)
-    crit = critical_points(x_segs, h_segs)
+    crit, exacto = critical_points(x_segs, h_segs)
     criticos_detalle_latex, criticos_detalle_txt = critical_points_details(x_segs, h_segs)
     if len(crit) == 0:
         # caso totalmente infinito (raro): un solo intervalo
@@ -809,6 +843,7 @@ def solve_convolution_from_segs(x_segs, h_segs):
     else:
         bounds = [float('-inf')] + crit + [float('inf')]
     regiones = []
+    por_par = {}  # OPT-6: integrando, primitiva y regla dependen solo del par (i, j)
     for k in range(len(bounds) - 1):
         lo, hi = bounds[k], bounds[k + 1]
         # punto de prueba
@@ -826,8 +861,11 @@ def solve_convolution_from_segs(x_segs, h_segs):
         solapes_detalle = [overlap_details(o, x_segs[o['i']], h_segs[o['j']]) for o in ov]
         solapes_latex = [detalle[0] for detalle in solapes_detalle]
         solapes_txt = [detalle[1] for detalle in solapes_detalle]
+        solapes_resumen = '; '.join(
+            [rf"\(\tau\in[{latex(o['low_sym'])},{latex(o['high_sym'])}]\) (par \(x_{{{o['i']+1}}} \cdot h_{{{o['j']+1}}}\))"
+             for o in ov])
         ultimo = (k == len(bounds) - 2)
-        cond = intervalo_t_latex(lo, hi, primero=(k == 0), ultimo=ultimo)
+        cond = intervalo_t_latex(lo, hi, primero=(k == 0), ultimo=ultimo, exacto=exacto)
         if not ov:
             # Como en los apuntes (Lección 3, ej. 2, p.23): el tramo sin solape
             # no queda como un simple «y=0», se muestra la integral con la
@@ -845,7 +883,7 @@ def solve_convolution_from_segs(x_segs, h_segs):
                     cero_txt = f'∫[t → ∞] (0)·({h1_txt}) dτ'
             regiones.append({
                 'k': k, 't_lo': lo, 't_hi': hi, 'cond_latex': cond,
-                'cond_txt': _cond_txt(lo, hi, ultimo),
+                'cond_txt': _cond_txt(lo, hi, ultimo, exacto),
                 'hay_solape': False,
                 'explicacion': r'En este intervalo \(x(\tau)\) y \(h(t-\tau)\) no se solapan: el producto es \(0\) en todo \(\tau\).',
                 'solapes_latex': [], 'solapes_txt': [],
@@ -864,10 +902,20 @@ def solve_convolution_from_segs(x_segs, h_segs):
         for o in ov:
             i, j = o['i'], o['j']
             xs, hs = x_segs[i], h_segs[j]
-            xe = xs['expr'].subs(t, tau)
-            he = hs['expr'].subs(t, t - tau)
-            # OPT-1: expand (barato) en vez de simplify (costoso) en intermedios
-            integrando = sp.expand(xe * he)
+            if (i, j) not in por_par:
+                xe = xs['expr'].subs(t, tau)
+                he = hs['expr'].subs(t, t - tau)
+                # OPT-1: expand (barato) en vez de simplify (costoso) en intermedios
+                integrando = sp.expand(xe * he)
+                # primitiva (una sola vez por par; se reutiliza en cada parte y región)
+                try:
+                    F = sp.integrate(integrando, tau)
+                    if isinstance(F, sp.Integral):
+                        F = _simplify(F.doit())
+                except Exception:
+                    F = sp.Integral(integrando, tau)
+                por_par[(i, j)] = (xe, he, integrando, F, regla_integrando(integrando, tau))
+            xe, he, integrando, F, regla = por_par[(i, j)]
             # Como en los apuntes (Lección 3, p.30-31): cuando la ventana móvil
             # ya se salió por la derecha del último tramo de x, esa parte de la
             # integral entrante vale 0 y se escribe explícita: ∫ (0)·(h) dτ = 0.
@@ -886,13 +934,6 @@ def solve_convolution_from_segs(x_segs, h_segs):
                         'low_txt': _txt_expr(lo_z), 'high_txt': _txt_expr(hi_z),
                         'h_shift_txt': _txt_expr(he),
                     })
-            # primitiva (una sola vez por par; se reutiliza en cada parte)
-            try:
-                F = sp.integrate(integrando, tau)
-                if isinstance(F, sp.Integral):
-                    F = sp.simplify(F.doit())
-            except Exception:
-                F = sp.Integral(integrando, tau)
             # Como en la guía: el solape se parte en los puntos críticos
             # interiores (integral saliente = lo que va dejando el borde,
             # integral entrante = la parte nueva). Orden descendente: la
@@ -903,13 +944,13 @@ def solve_convolution_from_segs(x_segs, h_segs):
             partes = [(bordes[k], bordes[k + 1]) for k in range(len(bordes) - 1)]
             partes.reverse()
             for p, (slo_num, shi_num) in enumerate(partes):
-                low_sym = o['low_sym'] if abs(slo_num - o['low_num']) < 1e-9 else _num_to_sym(slo_num)
-                high_sym = o['high_sym'] if abs(shi_num - o['high_num']) < 1e-9 else _num_to_sym(shi_num)
+                low_sym = o['low_sym'] if abs(slo_num - o['low_num']) < 1e-9 else exacto.get(slo_num) or _num_to_sym(slo_num)
+                high_sym = o['high_sym'] if abs(shi_num - o['high_num']) < 1e-9 else exacto.get(shi_num) or _num_to_sym(shi_num)
                 try:
                     val = sp.cancel(F.subs(tau, high_sym) - F.subs(tau, low_sym))
                 except Exception:
                     try:
-                        val = sp.simplify(sp.integrate(integrando, (tau, low_sym, high_sym)))
+                        val = _simplify(sp.integrate(integrando, (tau, low_sym, high_sym)))
                     except Exception:
                         val = sp.nan
                 # BUG-15: con límite infinito la integral puede NO converger
@@ -922,17 +963,17 @@ def solve_convolution_from_segs(x_segs, h_segs):
                     valor_latex_g = _valor_divergente_latex(val)
                     valor_txt_g = _valor_divergente_txt(val)
                 else:
-                    valor_latex_g = latex(sp.simplify(val))
+                    valor_latex_g = latex(_simplify(val))
                     valor_txt_g = _txt_expr(val)
                     total = sp.expand(total + val)
                 # Procedimiento por intervalo (como en clase): regla, primitiva,
                 # evaluar arriba y abajo por separado y restar (TFC).
                 try:
-                    F_upper = sp.simplify(F.subs(tau, high_sym))
+                    F_upper = _simplify(F.subs(tau, high_sym))
                 except Exception:
                     F_upper = F.subs(tau, high_sym)
                 try:
-                    F_lower = sp.simplify(F.subs(tau, low_sym))
+                    F_lower = _simplify(F.subs(tau, low_sym))
                 except Exception:
                     F_lower = F.subs(tau, low_sym)
                 integrales.append({
@@ -942,7 +983,7 @@ def solve_convolution_from_segs(x_segs, h_segs):
                     'x_tau_latex': latex(xe), 'h_shift_latex': latex(he),
                     'low_latex': latex(low_sym), 'high_latex': latex(high_sym),
                     'integrando_latex': latex(integrando),
-                    'regla_integrando': regla_integrando(integrando, tau),
+                    'regla_integrando': regla,
                     'integrando_txt': _txt_expr(integrando),
                     'primitiva_latex': latex(F) + r' + C',
                     'eval_latex': latex(F) + r'\Big|_{' + latex(low_sym) + r'}^{' + latex(high_sym) + r'} = ' + latex(val),
@@ -962,12 +1003,9 @@ def solve_convolution_from_segs(x_segs, h_segs):
             # BUG-15: la región no tiene respuesta numérica. Se marca
             # 'diverge' para que UI/texto digan «no converge» y la gráfica
             # deje un hueco (nan) en vez de dibujar ∞.
-            solapes_resumen = '; '.join(
-                [rf"\(\tau\in[{latex(o['low_sym'])},{latex(o['high_sym'])}]\) (par \(x_{{{o['i']+1}}} \cdot h_{{{o['j']+1}}}\))"
-                 for o in ov])
             regiones.append({
                 'k': k, 't_lo': lo, 't_hi': hi, 'cond_latex': cond,
-                'cond_txt': _cond_txt(lo, hi, ultimo),
+                'cond_txt': _cond_txt(lo, hi, ultimo, exacto),
                 'hay_solape': True,
                 'explicacion': (r'Solape en \(\tau\): ' + solapes_resumen + '.'),
                 'solapes_latex': solapes_latex, 'solapes_txt': solapes_txt,
@@ -979,13 +1017,10 @@ def solve_convolution_from_segs(x_segs, h_segs):
                 'resultado_txt': 'no converge',
             })
             continue
-        total = sp.simplify(sp.expand(total))
-        solapes_resumen = '; '.join(
-            [rf"\(\tau\in[{latex(o['low_sym'])},{latex(o['high_sym'])}]\) (par \(x_{{{o['i']+1}}} \cdot h_{{{o['j']+1}}}\))"
-             for o in ov])
+        total = _simplify(sp.expand(total))
         regiones.append({
             'k': k, 't_lo': lo, 't_hi': hi, 'cond_latex': cond,
-            'cond_txt': _cond_txt(lo, hi, ultimo),
+            'cond_txt': _cond_txt(lo, hi, ultimo, exacto),
             'hay_solape': True,
             'explicacion': (r'Solape en \(\tau\): ' + solapes_resumen + '.'),
             'solapes_latex': solapes_latex, 'solapes_txt': solapes_txt,
@@ -1006,11 +1041,11 @@ def solve_convolution_from_segs(x_segs, h_segs):
             if lo == float('-inf') and hi == float('inf'):
                 esc_parts.append(f"({latex(r['resultado'])})")
             elif lo == float('-inf'):
-                esc_parts.append(f"({latex(r['resultado'])})\\,[1-u({fmt_u_shift(hi)})]")
+                esc_parts.append(f"({latex(r['resultado'])})\\,[1-u({fmt_u_shift(hi, exacto)})]")
             elif hi == float('inf'):
-                esc_parts.append(f"({latex(r['resultado'])})\\,[u({fmt_u_shift(lo)})]")
+                esc_parts.append(f"({latex(r['resultado'])})\\,[u({fmt_u_shift(lo, exacto)})]")
             else:
-                esc_parts.append(f"({latex(r['resultado'])})\\,[u({fmt_u_shift(lo)})-u({fmt_u_shift(hi)})]")
+                esc_parts.append(f"({latex(r['resultado'])})\\,[u({fmt_u_shift(lo, exacto)})-u({fmt_u_shift(hi, exacto)})]")
     if any(r.get('diverge') for r in regiones):
         y_esc = ''
     elif not esc_parts:
@@ -1027,7 +1062,8 @@ def solve_convolution_from_segs(x_segs, h_segs):
         'y_tramos_latex': tramos,
         'y_escalones_latex': y_esc,
         'procedimiento_txt': _procedimiento_txt(
-            x_segs, h_segs, p1, p2, crit, criticos_detalle_txt, regiones),
+            x_segs, h_segs, p1, p2, crit, criticos_detalle_txt, regiones, exacto),
+        'exacto': exacto,
         'avisos': [r['aviso_txt'] for r in regiones if r.get('diverge')],
         'x_tramos_latex': signal_cases_latex('x(t)', x_segs, t),
         'h_tramos_latex': signal_cases_latex('h(t)', h_segs, t),
@@ -1138,7 +1174,7 @@ def y_function(regiones):
 
 # ------------------------------------------------- motor de integrales
 def regla_integrando(f, var):
-    f = sp.simplify(f)
+    f = _simplify(f)
     txt = []
     if f.is_polynomial(var):
         deg = sp.Poly(f, var).degree()
@@ -1171,7 +1207,7 @@ def solve_integral(expr_str, a_str=None, b_str=None, var_name='tau'):
     # si escribió 't' pero var es tau, sustituir
     if var == tau and f.has(t) and not f.has(tau):
         f = f.subs(t, tau)
-    f_simp = sp.simplify(f)
+    f_simp = _simplify(f)
     f_exp = sp.expand(f_simp)
     pasos = []
     pasos.append({'titulo': '1. Integrando original', 'latex': latex(f),
@@ -1195,7 +1231,7 @@ def solve_integral(expr_str, a_str=None, b_str=None, var_name='tau'):
     # verificación dF/dτ == f (BUG-4/DESIGN-7: sin `dir()`, `ok` sí se reporta)
     ver_str, ok = '?', None
     try:
-        ver = sp.simplify(sp.diff(F, var) - f_exp)
+        ver = _simplify(sp.diff(F, var) - f_exp)
         ok = bool(ver == 0)
         ver_str = str(ver)
     except Exception:
@@ -1208,11 +1244,11 @@ def solve_integral(expr_str, a_str=None, b_str=None, var_name='tau'):
         bb = parse_bound(b_str)
         # permitir límites con t (ej. 0 y t): parsear con t (BUG-5: nombres claros)
         try:
-            F_upper = sp.simplify(F.subs(var, bb))   # F(b): límite superior
-            F_lower = sp.simplify(F.subs(var, aa))   # F(a): límite inferior
+            F_upper = _simplify(F.subs(var, bb))   # F(b): límite superior
+            F_lower = _simplify(F.subs(var, aa))   # F(a): límite inferior
         except Exception:
             F_upper, F_lower = F.subs(var, bb), F.subs(var, aa)
-        val = sp.simplify(F_upper - F_lower)
+        val = _simplify(F_upper - F_lower)
         pasos.append({'titulo': '5. Evaluar en el límite superior', 'latex': r'F(' + latex(bb) + r') = ' + latex(F_upper),
                       'detalle': f"Se sustituye \\({latex(var)} = {latex(bb)}\\) en la primitiva."})
         pasos.append({'titulo': '6. Evaluar en el límite inferior', 'latex': r'F(' + latex(aa) + r') = ' + latex(F_lower),
@@ -1344,6 +1380,15 @@ def api_descomponer():
         return jsonify({'ok': False, 'error': str(e)}), 400
 
 
+def _error_400(e):
+    """Respuesta JSON 400 común a las rutas de cálculo (se llama desde su except)."""
+    if isinstance(e, RequestEntityTooLarge):
+        raise e  # deja que el errorhandler 413 responda JSON
+    if not isinstance(e, ValueError):
+        traceback.print_exc()  # errores de usuario (ValueError) no ensucian el log
+    return jsonify({'ok': False, 'error': str(e)}), 400
+
+
 @app.route('/api/convolve', methods=['POST'])
 def api_convolve():
     try:
@@ -1387,12 +1432,13 @@ def api_convolve():
         yv = [None if not math.isfinite(v) else v for v in np.asarray(yv, dtype=float).tolist()]
         # convertir regiones (sympy -> str)
         regs = []
+        ex = sol['exacto']
         for r in sol['regiones']:
             regs.append({
                 't_lo': None if abs(r['t_lo']) == float('inf') else r['t_lo'],
                 't_hi': None if abs(r['t_hi']) == float('inf') else r['t_hi'],
-                't_lo_str': '-∞' if r['t_lo'] == float('-inf') else (('+∞' if r['t_lo'] == float('inf') else fmt_num(r['t_lo']))),
-                't_hi_str': '+∞' if r['t_hi'] == float('inf') else (('-∞' if r['t_hi'] == float('-inf') else fmt_num(r['t_hi']))),
+                't_lo_str': '-∞' if r['t_lo'] == float('-inf') else (('+∞' if r['t_lo'] == float('inf') else (_txt_num(r['t_lo'], ex) if r['t_lo'] in ex else fmt_num(r['t_lo'])))),
+                't_hi_str': '+∞' if r['t_hi'] == float('inf') else (('-∞' if r['t_hi'] == float('-inf') else (_txt_num(r['t_hi'], ex) if r['t_hi'] in ex else fmt_num(r['t_hi'])))),
                 'cond_latex': r['cond_latex'],
                 'cond_txt': r['cond_txt'],
                 'hay_solape': r['hay_solape'],
@@ -1408,6 +1454,8 @@ def api_convolve():
         return jsonify({'ok': True, 'paso1': sol['paso1'], 'paso2': sol['paso2'],
                         'criticos': crit, 'criticos_detalle_latex': sol['criticos_detalle_latex'],
                         't_inicio': sol['t_inicio'],
+                        # solo si hay críticos irracionales (ej. π−1): forma exacta o None
+                        **({'criticos_latex': [latex(ex[c]) if c in ex else None for c in crit]} if ex else {}),
                         'regiones': regs, 'y_tramos_latex': sol['y_tramos_latex'],
                         'y_escalones_latex': sol['y_escalones_latex'],
                         'x_tramos_latex': sol['x_tramos_latex'],
@@ -1417,12 +1465,7 @@ def api_convolve():
                         'criterio': criterio_fija(x_segs, h_segs),
                         'grid': g.tolist(), 'x_vals': xv.tolist(), 'h_vals': hv.tolist(), 'y_vals': yv})
     except Exception as e:
-        from werkzeug.exceptions import RequestEntityTooLarge
-        if isinstance(e, RequestEntityTooLarge):
-            raise  # deja que el errorhandler 413 responda JSON
-        if not isinstance(e, ValueError):
-            traceback.print_exc()  # errores de usuario (ValueError) no ensucian el log
-        return jsonify({'ok': False, 'error': str(e)}), 400
+        return _error_400(e)
 
 
 @app.route('/api/integral', methods=['POST'])
@@ -1432,12 +1475,7 @@ def api_integral():
         sol = solve_integral_cached(data.get('expr', '0'), data.get('a', ''), data.get('b', ''), data.get('var', 'tau'))
         return jsonify({'ok': True, **sol})
     except Exception as e:
-        from werkzeug.exceptions import RequestEntityTooLarge
-        if isinstance(e, RequestEntityTooLarge):
-            raise  # deja que el errorhandler 413 responda JSON
-        if not isinstance(e, ValueError):
-            traceback.print_exc()
-        return jsonify({'ok': False, 'error': str(e)}), 400
+        return _error_400(e)
 
 
 @app.route('/api/solape', methods=['POST'])
@@ -1466,37 +1504,13 @@ def api_solape():
             hi = t0 + 6
         grid = np.linspace(lo, hi, 700)
         xv = eval_piecewise(x_segs, grid)
-        # h(t0 - tau): evaluar h en (t0 - tau)
-        hv = np.zeros_like(grid)
-        for s in h_segs:
-            try:
-                f = _lambdify_cached(s)  # OPT-5: reutiliza compilación
-            except Exception:
-                continue
-            arg = t0 - grid
-            m = np.ones_like(grid, dtype=bool)
-            if s['a_num'] != float('-inf'):
-                m &= (arg >= s['a_num'] - 1e-12)
-            if s['b_num'] != float('inf'):
-                m &= (arg <= s['b_num'] + 1e-12)
-            try:
-                vv = np.asarray(f(arg), dtype=float)
-                if vv.shape == ():
-                    vv = np.full_like(grid, float(vv))
-                hv[m] = np.nan_to_num(vv[m], nan=0.0, posinf=0.0, neginf=0.0)
-            except Exception:
-                pass
+        hv = eval_piecewise(h_segs, t0 - grid)  # h(t0 - tau)
         prod = xv * hv
         area = float(_trapz(prod, grid))  # BUG-10: compatible NumPy 1.x y 2.x
         return jsonify({'ok': True, 'tau': grid.tolist(), 'x': xv.tolist(), 'h': hv.tolist(),
                         'prod': prod.tolist(), 'area_trapz': area})
     except Exception as e:
-        from werkzeug.exceptions import RequestEntityTooLarge
-        if isinstance(e, RequestEntityTooLarge):
-            raise  # deja que el errorhandler 413 responda JSON
-        if not isinstance(e, ValueError):
-            traceback.print_exc()
-        return jsonify({'ok': False, 'error': str(e)}), 400
+        return _error_400(e)
 
 
 if __name__ == '__main__':
