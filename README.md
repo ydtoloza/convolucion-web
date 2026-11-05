@@ -36,16 +36,6 @@ docker compose up --build          # http://localhost:8000
 Cada push a `main` construye y publica la imagen en GHCR
 (`.github/workflows/docker.yml`): `ghcr.io/ydtoloza/convolucion-web:latest`.
 
-## Despliegue (VPS Contabo)
-
-El contenedor corre con `--restart unless-stopped`, publicado en `127.0.0.1:8010`
-y nginx hace de proxy inverso con TLS (certbot) para `systems.lzid.me`.
-
-Para actualizar a la última imagen (tras un push a `main`):
-
-```bash
-ssh -p 22335 root@217.216.49.147 /root/update-convolucion.sh
-```
 
 Ese script hace: `docker pull` de `latest`, recreate del contenedor y health check.
 
